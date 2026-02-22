@@ -15,17 +15,24 @@ COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
 # Copy application code
-COPY app/ ./app/
+COPY backend/ ./backend/
 
-# Create directory for SQLite checkpoint database
-RUN mkdir -p /data
+# Create non-root user for security (principle of least privilege)
+# UID 1000 is standard for first non-root user
+RUN useradd -m -u 1000 appuser
+
+# Create directory for SQLite checkpoint database with proper ownership
+RUN mkdir -p /data && chown appuser:appuser /data
 
 # Environment variables (can be overridden)
 ENV LLM_BASE_URL=https://api.openai.com/v1
 ENV LLM_MODEL=gpt-4o
 
+# Switch to non-root user
+USER appuser
+
 # Expose port
 EXPOSE 8000
 
 # Run the application
-CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]
+CMD ["uvicorn", "backend.main:app", "--host", "0.0.0.0", "--port", "8000"]
