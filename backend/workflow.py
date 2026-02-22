@@ -9,6 +9,7 @@ from langgraph.checkpoint.sqlite.aio import AsyncSqliteSaver
 from langgraph.graph import START, StateGraph
 from langgraph.graph.state import CompiledStateGraph
 
+from backend.evaluation.cost_tracker import record_node_timing
 from backend.nodes import (
     critic_agent,
     extractor_agent,
@@ -32,6 +33,7 @@ def _timed_node(
         result = await func(state)
         elapsed_ms = (time.perf_counter() - start) * 1000
         logger.info("%s completed in %.0fms", func.__name__, elapsed_ms)
+        record_node_timing(func.__name__, elapsed_ms)
         return result
 
     return wrapper

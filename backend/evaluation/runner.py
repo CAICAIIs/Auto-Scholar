@@ -3,11 +3,36 @@ from backend.evaluation.citation_metrics import (
     calculate_citation_precision,
     calculate_citation_recall,
 )
-from backend.evaluation.cost_tracker import parse_cost_from_logs
+from backend.evaluation.cost_tracker import get_cost_efficiency_from_tracking, parse_cost_from_logs
 from backend.evaluation.human_ratings import get_rating_summary
-from backend.evaluation.schemas import EvaluationResult
+from backend.evaluation.schemas import CostEfficiencyResult, EvaluationResult
 from backend.evaluation.section_completeness import evaluate_section_completeness
 from backend.schemas import ClaimVerificationSummary, DraftOutput, PaperMetadata
+
+
+def _merge_cost_results(
+    log_based: CostEfficiencyResult,
+    tracked: CostEfficiencyResult,
+) -> CostEfficiencyResult:
+    """Merge log-parsed and runtime-tracked cost data, preferring tracked when available."""
+    merged_timings = dict(log_based.node_timings)
+    for node, ms in tracked.node_timings.items():
+        merged_timings[node] = ms
+
+    return CostEfficiencyResult(
+        prompt_tokens=tracked.prompt_tokens
+        if tracked.prompt_tokens > 0
+        else log_based.prompt_tokens,
+        completion_tokens=tracked.completion_tokens
+        if tracked.completion_tokens > 0
+        else log_based.completion_tokens,
+        total_llm_calls=tracked.total_llm_calls
+        if tracked.total_llm_calls > 0
+        else log_based.total_llm_calls,
+        total_search_calls=max(log_based.total_search_calls, tracked.total_search_calls),
+        total_latency_ms=sum(merged_timings.values()),
+        node_timings=merged_timings,
+    )
 
 
 def run_evaluation(
@@ -24,7 +49,10 @@ def run_evaluation(
     citation_recall = calculate_citation_recall(draft, approved_papers)
     section_completeness = evaluate_section_completeness(draft, language)
     academic_style = calculate_academic_style(draft, language)
-    cost_efficiency = parse_cost_from_logs(logs)
+
+    log_cost = parse_cost_from_logs(logs)
+    tracked_cost = get_cost_efficiency_from_tracking()
+    cost_efficiency = _merge_cost_results(log_cost, tracked_cost)
 
     claim_support_rate = 0.0
     if claim_verification and claim_verification.total_verifications > 0:

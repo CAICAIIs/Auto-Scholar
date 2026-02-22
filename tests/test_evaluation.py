@@ -13,7 +13,8 @@ from backend.evaluation.cost_tracker import (
     record_node_timing,
     reset_tracking,
 )
-from backend.evaluation.runner import run_evaluation
+from backend.evaluation.runner import _merge_cost_results, run_evaluation
+from backend.evaluation.schemas import CostEfficiencyResult
 from backend.evaluation.section_completeness import evaluate_section_completeness
 from backend.schemas import (
     ClaimVerificationSummary,
@@ -311,3 +312,76 @@ class TestEvaluationRunner:
         )
 
         assert result.claim_support_rate == 0.0
+
+
+class TestCostMerge:
+    def test_merge_prefers_tracked_tokens(self):
+        log_based = CostEfficiencyResult(
+            prompt_tokens=0,
+            completion_tokens=0,
+            total_llm_calls=0,
+            total_search_calls=0,
+            total_latency_ms=1000.0,
+            node_timings={"planner_agent": 1000.0},
+        )
+        tracked = CostEfficiencyResult(
+            prompt_tokens=500,
+            completion_tokens=200,
+            total_llm_calls=3,
+            total_search_calls=0,
+            total_latency_ms=2000.0,
+            node_timings={"planner_agent": 1500.0, "writer_agent": 500.0},
+        )
+        merged = _merge_cost_results(log_based, tracked)
+        assert merged.prompt_tokens == 500
+        assert merged.completion_tokens == 200
+        assert merged.total_llm_calls == 3
+        assert merged.node_timings["planner_agent"] == 1500.0
+        assert merged.node_timings["writer_agent"] == 500.0
+        assert merged.total_latency_ms == 2000.0
+
+    def test_merge_falls_back_to_log_when_tracked_empty(self):
+        log_based = CostEfficiencyResult(
+            prompt_tokens=100,
+            completion_tokens=50,
+            total_llm_calls=2,
+            total_search_calls=1,
+            total_latency_ms=3000.0,
+            node_timings={"planner_agent": 3000.0},
+        )
+        tracked = CostEfficiencyResult(
+            prompt_tokens=0,
+            completion_tokens=0,
+            total_llm_calls=0,
+            total_search_calls=0,
+            total_latency_ms=0,
+            node_timings={},
+        )
+        merged = _merge_cost_results(log_based, tracked)
+        assert merged.prompt_tokens == 100
+        assert merged.completion_tokens == 50
+        assert merged.total_llm_calls == 2
+        assert merged.node_timings["planner_agent"] == 3000.0
+
+    def test_evaluation_runner_uses_merged_cost(
+        self, sample_draft: DraftOutput, sample_papers: list[PaperMetadata]
+    ):
+        reset_tracking()
+        record_llm_usage(prompt_tokens=300, completion_tokens=150, model="gpt-4o")
+        record_node_timing("planner_agent", 1200.0)
+
+        logs = ["[writer_agent] completed in 2.0s"]
+        result = run_evaluation(
+            thread_id="test-merge",
+            draft=sample_draft,
+            approved_papers=sample_papers,
+            logs=logs,
+            language="en",
+        )
+
+        assert result.cost_efficiency.prompt_tokens == 300
+        assert result.cost_efficiency.completion_tokens == 150
+        assert result.cost_efficiency.total_llm_calls == 1
+        assert result.cost_efficiency.node_timings["planner_agent"] == 1200.0
+        assert result.cost_efficiency.node_timings["writer_agent"] == pytest.approx(2000.0)
+        reset_tracking()

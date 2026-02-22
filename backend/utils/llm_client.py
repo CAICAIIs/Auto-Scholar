@@ -17,6 +17,8 @@ from tenacity import (
     wait_exponential,
 )
 
+from backend.evaluation.cost_tracker import record_llm_usage
+
 load_dotenv()
 
 logger = logging.getLogger(__name__)
@@ -126,6 +128,14 @@ async def _call_llm(
         )
         elapsed = time.perf_counter() - start_time
         logger.info("LLM request completed in %.2fs", elapsed)
+
+        if completion.usage:
+            record_llm_usage(
+                prompt_tokens=completion.usage.prompt_tokens,
+                completion_tokens=completion.usage.completion_tokens,
+                model=model,
+            )
+
         raw_content = completion.choices[0].message.content
         if not raw_content:
             raise ValueError("LLM returned empty response")
