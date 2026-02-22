@@ -10,6 +10,7 @@ from backend.schemas import (
     DraftOutput,
     PaperMetadata,
     PaperSource,
+    ResearchPlan,
 )
 
 
@@ -31,3 +32,4 @@ class AgentState(TypedDict):
     agent_handoffs: Annotated[list[str], operator.add]
     draft_outline: DraftOutline | None
     claim_verification: ClaimVerificationSummary | None
+    research_plan: ResearchPlan | None

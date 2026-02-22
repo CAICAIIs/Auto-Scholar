@@ -221,6 +221,44 @@ class DraftOutput(BaseModel):
     sections: list[ReviewSection]
 
 
+class SubQuestion(BaseModel):
+    """A sub-question decomposed from the user's research query."""
+
+    question: str = Field(description="Sub-question text")
+    keywords: list[str] = Field(
+        description="Search keywords for this sub-question",
+        min_length=2,
+        max_length=5,
+    )
+    preferred_source: PaperSource = Field(
+        default=PaperSource.SEMANTIC_SCHOLAR,
+        description="Recommended data source for this sub-question",
+    )
+    estimated_papers: int = Field(
+        default=5,
+        description="Estimated number of papers needed",
+        ge=3,
+        le=15,
+    )
+    priority: int = Field(
+        default=1,
+        description="Priority level (1 = highest)",
+        ge=1,
+        le=5,
+    )
+
+
+class ResearchPlan(BaseModel):
+    """Structured research plan with CoT reasoning and sub-question decomposition."""
+
+    reasoning: str = Field(description="Chain-of-thought reasoning for the decomposition")
+    sub_questions: list[SubQuestion] = Field(description="Decomposed sub-questions")
+    total_estimated_papers: int = Field(
+        default=0,
+        description="Total estimated papers across all sub-questions",
+    )
+
+
 class StartRequest(BaseModel):
     query: str
     language: str = "en"
