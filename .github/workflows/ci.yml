@@ -11,50 +11,52 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      
+
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
           python-version: "3.11"
-      
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v4
+
       - name: Install dependencies
-        run: |
-          pip install ruff mypy
-          pip install -r requirements.txt
-      
+        run: uv sync --extra dev
+
       - name: Lint with ruff
-        run: ruff check backend/
-      
+        run: uv run ruff check backend/
+
       - name: Format check with ruff
-        run: ruff format --check backend/
-      
+        run: uv run ruff format --check backend/
+
       - name: Type check with mypy
-        run: mypy backend/ --ignore-missing-imports
+        run: uv run mypy backend/ --ignore-missing-imports
 
   test:
     runs-on: ubuntu-latest
     strategy:
       matrix:
         python-version: ["3.11", "3.12"]
-    
+
     steps:
       - uses: actions/checkout@v4
-      
+
       - name: Set up Python ${{ matrix.python-version }}
         uses: actions/setup-python@v5
         with:
           python-version: ${{ matrix.python-version }}
-      
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v4
+
       - name: Install dependencies
-        run: |
-          pip install -r requirements.txt
-          pip install pytest pytest-asyncio pytest-cov httpx
-      
+        run: uv sync --extra dev
+
       - name: Run tests with coverage
-        run: pytest tests/ -m "not slow" --cov=backend --cov-report=xml --cov-report=term-missing --cov-fail-under=40
+        run: uv run pytest tests/ -m "not slow" --cov=backend --cov-report=xml --cov-report=term-missing --cov-fail-under=40
         env:
           LLM_API_KEY: ${{ secrets.LLM_API_KEY }}
-      
+
       - name: Upload coverage to Codecov
         if: matrix.python-version == '3.11'
         uses: codecov/codecov-action@v4
@@ -62,3 +64,29 @@ jobs:
           files: ./coverage.xml
           fail_ci_if_error: false
           token: ${{ secrets.CODECOV_TOKEN }}
+
+  frontend:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.3.9
+
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+
+      - name: Type check
+        run: bun x tsc --noEmit
+
+      - name: Lint
+        run: bun run lint
+
+      - name: Unit tests
+        run: bun run test
