@@ -1,14 +1,13 @@
 import asyncio
 import json
 import logging
-import re
 import uuid
 from contextlib import asynccontextmanager
 from typing import Any
 
 from fastapi import FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import Response, StreamingResponse
+from fastapi.responses import JSONResponse, Response, StreamingResponse
 from pydantic import BaseModel
 
 from backend.constants import WORKFLOW_TIMEOUT_SECONDS
@@ -18,7 +17,6 @@ from backend.evaluation.schemas import EvaluationResult, HumanRating
 from backend.schemas import (
     CitationStyle,
     ContinueRequest,
-    ContinueResponse,
     ConversationMessage,
     DraftOutput,
     MessageRole,
@@ -29,6 +27,7 @@ from backend.schemas import (
     StartRequest,
 )
 from backend.utils.charts import generate_all_charts
+from backend.utils.citations import normalize_draft_citations
 from backend.utils.event_queue import StreamingEventQueue
 from backend.utils.exporter import ExportFormat, export_to_docx, export_to_markdown
 from backend.utils.http_pool import close_session
@@ -51,9 +50,7 @@ class ApproveRequest(BaseModel):
 
 class ApproveResponse(BaseModel):
     thread_id: str
-    final_draft: DraftOutput | None
     approved_count: int
-    logs: list[str]
 
 
 @asynccontextmanager
@@ -168,7 +165,22 @@ async def stream_research(thread_id: str):
                             {"node": node_name, "log": log_entry}, ensure_ascii=False
                         )
                         await event_queue.push(event_str + "\n")
-            await event_queue.push(json.dumps({"event": "done"}) + "\n")
+
+            final_state = await graph.aget_state(config)
+            values = final_state.values or {}
+            final_draft = values.get("final_draft")
+            candidates = values.get("candidate_papers", [])
+
+            if final_draft:
+                approved_list = [p for p in candidates if p.is_approved]
+                normalize_draft_citations(final_draft, approved_list)
+
+            completed_payload = {
+                "event": "completed",
+                "final_draft": (final_draft.model_dump(mode="json") if final_draft else None),
+                "candidate_papers": [p.model_dump(mode="json") for p in candidates],
+            }
+            await event_queue.push(json.dumps(completed_payload, ensure_ascii=False) + "\n")
         except Exception as e:
             logger.error("Stream error for thread %s: %s", thread_id, e)
             await event_queue.push(json.dumps({"event": "error", "detail": str(e)}) + "\n")
@@ -190,7 +202,7 @@ async def stream_research(thread_id: str):
     )
 
 
-@app.post("/api/research/approve", response_model=ApproveResponse)
+@app.post("/api/research/approve", status_code=202)
 async def approve_papers(req: ApproveRequest):
     graph = app.state.graph
     config = _get_config(req.thread_id)
@@ -229,68 +241,24 @@ async def approve_papers(req: ApproveRequest):
         {"candidate_papers": updated_candidates},
     )
 
-    existing_log_count = len(snapshot.values.get("logs", []))
     logger.info(
-        "Approved %d papers for thread %s, resuming workflow", approved_count, req.thread_id
+        "Approved %d papers for thread %s, ready for streaming", approved_count, req.thread_id
     )
 
-    try:
-        result = await asyncio.wait_for(
-            graph.ainvoke(None, config=config),
-            timeout=WORKFLOW_TIMEOUT_SECONDS,
-        )
-    except TimeoutError:
-        logger.error(
-            "Workflow timeout after %ds for thread %s", WORKFLOW_TIMEOUT_SECONDS, req.thread_id
-        )
-        raise HTTPException(
-            status_code=504,
-            detail=f"处理超时 ({WORKFLOW_TIMEOUT_SECONDS}s)，请减少论文数量后重试",
-        )
-    except Exception as e:
-        logger.exception("Workflow error for thread %s: %s", req.thread_id, e)
-        raise HTTPException(
-            status_code=500,
-            detail=f"处理错误: {type(e).__name__}: {str(e)[:200]}",
-        )
-
-    all_logs = result.get("logs", [])
-    new_logs = all_logs[existing_log_count:]
-
-    final_draft = result.get("final_draft")
-
-    if final_draft:
-        approved_list = [p for p in updated_candidates if p.is_approved]
-        max_index = len(approved_list)
-        index_to_id = {i + 1: p.paper_id for i, p in enumerate(approved_list)}
-
-        for section in final_draft.sections:
-            pattern = r"\{cite:(\d+)\}"
-
-            def replace_match(m: re.Match[str]) -> str:
-                idx = int(m.group(1))
-                if 1 <= idx <= max_index:
-                    return f"[{idx}]"
-                logger.warning("Citation index %d out of range (1-%d), removing", idx, max_index)
-                return ""
-
-            section.content = re.sub(pattern, replace_match, section.content)
-            cited_indices = [
-                int(n)
-                for n in re.findall(r"\[(\d+)\]", section.content)
-                if 1 <= int(n) <= max_index
-            ]
-            section.cited_paper_ids = [index_to_id[idx] for idx in sorted(set(cited_indices))]
-
-    return ApproveResponse(
-        thread_id=req.thread_id,
-        final_draft=final_draft,
-        approved_count=approved_count,
-        logs=new_logs,
+    return JSONResponse(
+        status_code=202,
+        content=ApproveResponse(
+            thread_id=req.thread_id,
+            approved_count=approved_count,
+        ).model_dump(),
     )
 
 
-@app.post("/api/research/continue", response_model=ContinueResponse)
+class ContinueResponse(BaseModel):
+    thread_id: str
+
+
+@app.post("/api/research/continue", status_code=202)
 async def continue_research(req: ContinueRequest):
     graph = app.state.graph
     config = _get_config(req.thread_id)
@@ -311,7 +279,6 @@ async def continue_research(req: ContinueRequest):
         metadata={"action": "continue_research"},
     )
 
-    existing_log_count = len(snapshot.values.get("logs", []))
     logger.info(
         "Continuing research for thread %s with message: %s", req.thread_id, req.message[:100]
     )
@@ -328,71 +295,11 @@ async def continue_research(req: ContinueRequest):
         as_node="__start__",
     )
 
-    try:
-        result = await asyncio.wait_for(
-            graph.ainvoke(None, config=config),
-            timeout=WORKFLOW_TIMEOUT_SECONDS,
-        )
-    except TimeoutError:
-        logger.error(
-            "Workflow timeout after %ds for thread %s", WORKFLOW_TIMEOUT_SECONDS, req.thread_id
-        )
-        raise HTTPException(
-            status_code=504,
-            detail=f"继续研究超时 ({WORKFLOW_TIMEOUT_SECONDS}s)，请稍后重试",
-        )
-    except Exception as e:
-        logger.exception("Workflow error for thread %s: %s", req.thread_id, e)
-        raise HTTPException(
-            status_code=500,
-            detail=f"继续研究错误: {type(e).__name__}: {str(e)[:200]}",
-        )
-
-    all_logs = result.get("logs", [])
-    new_logs = all_logs[existing_log_count:]
-
-    assistant_message = ConversationMessage(
-        role=MessageRole.ASSISTANT,
-        content=f"Updated draft based on: {req.message}",
-        metadata={"action": "draft_updated", "has_draft": result.get("final_draft") is not None},
-    )
-
-    await graph.aupdate_state(
-        config,
-        {"messages": [assistant_message]},
-    )
-
-    final_draft = result.get("final_draft")
-    if final_draft:
-        candidates = result.get("candidate_papers", [])
-        approved_list = [p for p in candidates if p.is_approved]
-        max_index = len(approved_list)
-        index_to_id = {i + 1: p.paper_id for i, p in enumerate(approved_list)}
-
-        for section in final_draft.sections:
-            pattern = r"\{cite:(\d+)\}"
-
-            def replace_match(m: re.Match[str]) -> str:
-                idx = int(m.group(1))
-                if 1 <= idx <= max_index:
-                    return f"[{idx}]"
-                logger.warning("Citation index %d out of range (1-%d), removing", idx, max_index)
-                return ""
-
-            section.content = re.sub(pattern, replace_match, section.content)
-            cited_indices = [
-                int(n)
-                for n in re.findall(r"\[(\d+)\]", section.content)
-                if 1 <= int(n) <= max_index
-            ]
-            section.cited_paper_ids = [index_to_id[idx] for idx in sorted(set(cited_indices))]
-
-    return ContinueResponse(
-        thread_id=req.thread_id,
-        message=assistant_message,
-        final_draft=final_draft,
-        candidate_papers=result.get("candidate_papers", []),
-        logs=new_logs,
+    return JSONResponse(
+        status_code=202,
+        content=ContinueResponse(
+            thread_id=req.thread_id,
+        ).model_dump(),
     )
 
 
