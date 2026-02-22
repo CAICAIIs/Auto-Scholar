@@ -7,10 +7,13 @@ from typing import Any
 from pydantic import BaseModel
 
 from backend.constants import (
+    CLAIM_VERIFICATION_CONCURRENCY,
+    CLAIM_VERIFICATION_ENABLED,
     FULLTEXT_CONCURRENCY,
     LLM_CONCURRENCY,
     MAX_CONVERSATION_TURNS,
     MAX_KEYWORDS,
+    MIN_ENTAILMENT_RATIO,
     PAPERS_PER_QUERY,
     get_draft_max_tokens,
 )
@@ -36,6 +39,7 @@ from backend.schemas import (
     ReviewSection,
 )
 from backend.state import AgentState
+from backend.utils.claim_verifier import verify_draft_citations
 from backend.utils.fulltext_api import enrich_papers_with_fulltext
 from backend.utils.llm_client import structured_completion
 from backend.utils.scholar_api import search_papers_multi_source
@@ -507,11 +511,60 @@ async def critic_agent(state: AgentState) -> dict[str, Any]:
             "agent_handoffs": ["writer→critic"],
         }
 
+    claim_verification = None
+    if CLAIM_VERIFICATION_ENABLED and approved:
+        logger.info("critic_agent: starting claim-level verification")
+        try:
+            _, summary = await verify_draft_citations(
+                draft, approved, concurrency=CLAIM_VERIFICATION_CONCURRENCY
+            )
+            claim_verification = summary
+
+            if summary.total_verifications > 0:
+                entailment_ratio = summary.entails_count / summary.total_verifications
+                logger.info(
+                    "critic_agent: claim verification complete - %d/%d entails (%.1f%%)",
+                    summary.entails_count,
+                    summary.total_verifications,
+                    entailment_ratio * 100,
+                )
+
+                if entailment_ratio < MIN_ENTAILMENT_RATIO:
+                    failed_details = []
+                    for v in summary.failed_verifications[:3]:
+                        failed_details.append(
+                            f"Claim '{v.claim_text[:50]}...' citing [{v.citation_index}] "
+                            f"({v.label.value}): {v.rationale[:100]}"
+                        )
+                    errors.extend(failed_details)
+                    retry_count += 1
+                    log_msg = (
+                        f"QA failed: citation support ratio {entailment_ratio:.1%} "
+                        f"< {MIN_ENTAILMENT_RATIO:.0%} threshold"
+                    )
+                    logger.warning("critic_agent: %s", log_msg)
+                    return {
+                        "qa_errors": errors,
+                        "retry_count": retry_count,
+                        "claim_verification": claim_verification,
+                        "logs": [log_msg],
+                        "current_agent": "critic",
+                        "agent_handoffs": ["writer→critic"],
+                    }
+        except Exception as e:
+            logger.warning("critic_agent: claim verification failed, skipping: %s", e)
+
     log_msg = "QA passed: all citations verified"
+    if claim_verification:
+        log_msg += (
+            f" (semantic: {claim_verification.entails_count}/"
+            f"{claim_verification.total_verifications} entails)"
+        )
     logger.info("critic_agent: %s", log_msg)
     return {
         "qa_errors": [],
         "retry_count": retry_count,
+        "claim_verification": claim_verification,
         "logs": [log_msg],
         "current_agent": "critic",
         "agent_handoffs": ["writer→critic"],
