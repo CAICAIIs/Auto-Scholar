@@ -9,7 +9,7 @@ import aiohttp
 from dotenv import load_dotenv
 from tenacity import retry, retry_if_exception_type, stop_after_attempt, wait_exponential
 
-from backend.schemas import PaperMetadata, PaperSource
+from backend.schemas import PaperMetadata, PaperSource, ResearchPlan
 from backend.utils.http_pool import get_session
 from backend.utils.source_tracker import record_failure, record_success, should_skip
 
@@ -478,6 +478,71 @@ async def search_papers_multi_source(
             continue
         logger.info("Search from %s returned %d papers", source_names[i], len(r))
         record_success(source_keys[i])
+        all_papers.extend(r)
+
+    return deduplicate_papers(all_papers)
+
+
+async def search_by_plan(
+    plan: ResearchPlan,
+    default_limit: int = 10,
+) -> list[PaperMetadata]:
+    """Search papers per sub-question with differentiated sources and limits.
+
+    Each sub-question uses its preferred_source and estimated_papers count.
+    All sub-question searches run in parallel; results are cross-deduplicated.
+    """
+    if not plan.sub_questions:
+        return []
+
+    source_dispatch = {
+        PaperSource.SEMANTIC_SCHOLAR: search_semantic_scholar,
+        PaperSource.ARXIV: search_arxiv,
+        PaperSource.PUBMED: search_pubmed,
+    }
+
+    tasks: list[Any] = []
+    task_labels: list[str] = []
+
+    for sq in plan.sub_questions:
+        source = sq.preferred_source
+        limit = sq.estimated_papers or default_limit
+
+        if should_skip(source.value):
+            logger.warning(
+                "search_by_plan: skipping %s for sub-question '%s' due to recent failures",
+                source.value,
+                sq.question[:60],
+            )
+            continue
+
+        search_fn = source_dispatch.get(source)
+        if search_fn is None:
+            logger.warning("search_by_plan: unknown source %s, skipping", source)
+            continue
+
+        tasks.append(search_fn(sq.keywords, limit_per_query=limit))
+        task_labels.append(f"{sq.question[:40]}→{source.value}")
+
+    if not tasks:
+        return []
+
+    logger.info(
+        "search_by_plan: launching %d sub-question searches: %s",
+        len(tasks),
+        task_labels,
+    )
+    start_time = time.perf_counter()
+    results = await asyncio.gather(*tasks, return_exceptions=True)
+    elapsed = time.perf_counter() - start_time
+    logger.info("search_by_plan: all sub-question searches completed in %.2fs", elapsed)
+
+    all_papers: list[PaperMetadata] = []
+    for i, r in enumerate(results):
+        if isinstance(r, BaseException):
+            logger.error("search_by_plan: search for '%s' failed: %s", task_labels[i], r)
+            continue
+        logger.info("search_by_plan: '%s' returned %d papers", task_labels[i], len(r))
         all_papers.extend(r)
 
     return deduplicate_papers(all_papers)

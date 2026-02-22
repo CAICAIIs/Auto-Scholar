@@ -48,7 +48,7 @@ from backend.state import AgentState
 from backend.utils.claim_verifier import verify_draft_citations
 from backend.utils.fulltext_api import enrich_papers_with_fulltext
 from backend.utils.llm_client import structured_completion
-from backend.utils.scholar_api import search_papers_multi_source
+from backend.utils.scholar_api import search_by_plan, search_papers_multi_source
 
 logger = logging.getLogger(__name__)
 
@@ -176,20 +176,38 @@ async def retriever_agent(state: AgentState) -> dict[str, Any]:
             "agent_handoffs": ["planner→retriever"],
         }
 
+    research_plan = state.get("research_plan")
     sources = state.get("search_sources", [PaperSource.SEMANTIC_SCHOLAR])
-    source_names = [s.value for s in sources]
 
-    logger.info("retriever_agent: searching %d keywords across %s", len(keywords), source_names)
-    start_time = time.perf_counter()
-    papers = await search_papers_multi_source(
-        keywords, sources=sources, limit_per_query=PAPERS_PER_QUERY
-    )
-    elapsed = time.perf_counter() - start_time
-    logger.info("retriever_agent: paper search completed in %.2fs", elapsed)
+    if research_plan and research_plan.sub_questions:
+        logger.info(
+            "retriever_agent: plan-aware search with %d sub-questions",
+            len(research_plan.sub_questions),
+        )
+        start_time = time.perf_counter()
+        papers = await search_by_plan(research_plan, default_limit=PAPERS_PER_QUERY)
+        elapsed = time.perf_counter() - start_time
+        logger.info("retriever_agent: plan-aware search completed in %.2fs", elapsed)
 
-    log_msg = (
-        f"Found {len(papers)} unique papers across {len(keywords)} queries from {source_names}"
-    )
+        sq_sources = [sq.preferred_source.value for sq in research_plan.sub_questions]
+        log_msg = (
+            f"Found {len(papers)} unique papers from {len(research_plan.sub_questions)} "
+            f"sub-questions (sources: {sq_sources})"
+        )
+    else:
+        source_names = [s.value for s in sources]
+        logger.info("retriever_agent: searching %d keywords across %s", len(keywords), source_names)
+        start_time = time.perf_counter()
+        papers = await search_papers_multi_source(
+            keywords, sources=sources, limit_per_query=PAPERS_PER_QUERY
+        )
+        elapsed = time.perf_counter() - start_time
+        logger.info("retriever_agent: paper search completed in %.2fs", elapsed)
+
+        log_msg = (
+            f"Found {len(papers)} unique papers across {len(keywords)} queries from {source_names}"
+        )
+
     logger.info("retriever_agent: %s", log_msg)
     return {
         "candidate_papers": papers,
