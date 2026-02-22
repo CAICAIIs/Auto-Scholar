@@ -161,4 +161,26 @@ auto-scholar/
 - `npm run test:e2e` for headless
 - `npm run test:e2e:ui` for UI mode
 
+## Pre-Commit Checklist (MANDATORY)
+
+**Before EVERY commit, you MUST run these checks and ensure they pass:**
+
+```bash
+# Backend (ALL must pass)
+ruff check backend/                          # Lint - must show "All checks passed!"
+ruff format backend/ --check                 # Format - must show "X files already formatted"
+find backend -name '*.py' -exec python -m py_compile {} +  # Compile check
+
+# Frontend (ALL must pass)
+cd frontend && npx tsc --noEmit              # Type check - must exit 0
+cd frontend && npm run lint                  # ESLint - warnings OK, errors NOT OK
+```
+
+**If any check fails:**
+1. Fix the issue (e.g., `ruff format backend/` to auto-format)
+2. Re-run the check to confirm it passes
+3. Only then proceed with `git add` and `git commit`
+
+**CI will reject commits that fail these checks. Save time by running locally first.**
+
 When the Write or Edit tool has content size limits, always comply silently. Never suggest bypassing these limits via alternative tools. Never ask the user whether to switch approaches. Complete all chunked operations without commentary.

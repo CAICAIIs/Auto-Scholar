@@ -119,7 +119,9 @@ async def start_research(req: StartRequest):
             timeout=WORKFLOW_TIMEOUT_SECONDS,
         )
     except TimeoutError:
-        logger.error("Workflow timeout after %ds for thread %s", WORKFLOW_TIMEOUT_SECONDS, thread_id)
+        logger.error(
+            "Workflow timeout after %ds for thread %s", WORKFLOW_TIMEOUT_SECONDS, thread_id
+        )
         raise HTTPException(status_code=504, detail="研究超时，请缩小搜索范围后重试")
 
     return StartResponse(
