@@ -1,0 +1,105 @@
+{
+  "console": {
+    "title": "智能助手控制台",
+    "outputLanguageEnglish": "输出语言：英文",
+    "outputLanguageChinese": "输出语言：中文",
+    "history": "历史记录",
+    "historyEmpty": "暂无历史记录",
+    "historyLoad": "加载",
+    "historyStatus": {
+      "completed": "已完成",
+      "in_progress": "进行中",
+      "pending": "待处理"
+    },
+    "historyPapers": "{count} 篇论文"
+  },
+  "query": {
+    "placeholder": "输入研究主题...",
+    "continuePlaceholder": "输入后续问题...",
+    "start": "开始",
+    "continue": "继续",
+    "newTopic": "开始新话题",
+    "running": "运行中...",
+    "sources": "搜索来源：",
+    "sourceSemanticScholar": "Semantic Scholar",
+    "sourceArxiv": "arXiv",
+    "sourcePubmed": "PubMed",
+    "examples": "试试示例：",
+    "example1": "Transformer 在自然语言处理中的应用",
+    "example2": "深度学习在医学影像诊断中的应用",
+    "example3": "强化学习在机器人控制中的应用",
+    "example4": "大语言模型 2024 最新进展",
+    "example5": "联邦学习隐私保护研究"
+  },
+  "status": {
+    "idle": "就绪",
+    "searching": "正在搜索论文...",
+    "waiting_approval": "等待审批",
+    "processing": "正在处理论文...",
+    "drafting": "正在撰写综述...",
+    "continuing": "正在更新综述...",
+    "completed": "已完成",
+    "error": "错误"
+  },
+  "log": {
+    "waiting": "等待输入..."
+  },
+  "processing": {
+    "title": "论文处理中",
+    "papers": "篇论文",
+    "extracting": "提取中",
+    "drafting": "撰写中",
+    "qa": "校验中",
+    "draftingMessage": "正在根据提取的核心贡献撰写文献综述...",
+    "qaMessage": "正在验证引用并检查幻觉..."
+  },
+  "workspace": {
+    "title": "Auto-Scholar",
+    "idle": "输入研究主题以生成文献综述",
+    "error": "发生错误，请重试。",
+    "processing": "正在处理您的请求...",
+    "edit": "编辑",
+    "preview": "预览",
+    "reset": "重置",
+    "resetConfirm": "重置为原始内容？",
+    "editing": "编辑模式 - 修改内容将用于导出",
+    "references": "参考文献",
+    "export": "导出",
+    "exportTitle": "导出综述",
+    "exportDescription": "选择格式和引用样式下载您的文献综述",
+    "exportFormatLabel": "文件格式",
+    "exportMarkdown": "Markdown (.md)",
+    "exportWord": "Word 文档 (.docx)",
+    "citationStyleLabel": "引用格式",
+    "exportDownload": "下载",
+    "exportCancel": "取消",
+    "chartsTitle": "研究分析",
+    "chartsGenerate": "生成图表",
+    "chartsRefresh": "刷新",
+    "chartYearTrend": "发表年份分布",
+    "chartSourceDistribution": "论文来源",
+    "chartAuthorFrequency": "高频作者"
+  },
+  "approval": {
+    "title": "审核候选论文",
+    "description": "找到 {count} 篇论文。选择您想要纳入文献综述的论文。",
+    "selected": "已选择 {selected} / {total} 篇论文",
+    "processing": "处理中...",
+    "confirm": "确认并继续 ({count})",
+    "cancel": "取消"
+  },
+  "language": {
+    "switch": "English"
+  },
+  "errors": {
+    "networkError": "网络错误，请检查网络连接后重试。",
+    "timeout": "请求超时，请稍后重试或减少论文数量。",
+    "noPapers": "未找到相关论文，请尝试其他关键词。",
+    "draftFailed": "生成综述失败，请重试。",
+    "approvalFailed": "论文审批失败，请重试。",
+    "exportFailed": "导出失败，请重试。",
+    "sessionLoadFailed": "加载会话失败，请重试。",
+    "unknownError": "发生未知错误，请重试。",
+    "retry": "重试"
+  }
+}

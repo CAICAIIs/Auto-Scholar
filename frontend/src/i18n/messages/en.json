@@ -1,0 +1,105 @@
+{
+  "console": {
+    "title": "Agent Console",
+    "outputLanguageEnglish": "Output Language: English",
+    "outputLanguageChinese": "Output Language: Chinese",
+    "history": "History",
+    "historyEmpty": "No previous sessions",
+    "historyLoad": "Load",
+    "historyStatus": {
+      "completed": "Completed",
+      "in_progress": "In Progress",
+      "pending": "Pending"
+    },
+    "historyPapers": "{count} papers"
+  },
+  "query": {
+    "placeholder": "Enter research topic...",
+    "continuePlaceholder": "Ask a follow-up question...",
+    "start": "Start",
+    "continue": "Continue",
+    "newTopic": "Start new topic",
+    "running": "Running...",
+    "sources": "Search sources:",
+    "sourceSemanticScholar": "Semantic Scholar",
+    "sourceArxiv": "arXiv",
+    "sourcePubmed": "PubMed",
+    "examples": "Try an example:",
+    "example1": "Transformer architecture in NLP",
+    "example2": "Deep learning for medical imaging",
+    "example3": "Reinforcement learning in robotics",
+    "example4": "Large language models 2024",
+    "example5": "Federated learning privacy"
+  },
+  "status": {
+    "idle": "Ready",
+    "searching": "Searching papers...",
+    "waiting_approval": "Waiting for approval",
+    "processing": "Processing papers...",
+    "drafting": "Writing review...",
+    "continuing": "Updating draft...",
+    "completed": "Completed",
+    "error": "Error"
+  },
+  "log": {
+    "waiting": "Waiting for input..."
+  },
+  "processing": {
+    "title": "Processing Papers",
+    "papers": "papers",
+    "extracting": "Extracting",
+    "drafting": "Drafting",
+    "qa": "Verifying",
+    "draftingMessage": "Writing literature review based on extracted contributions...",
+    "qaMessage": "Verifying citations and checking for hallucinations..."
+  },
+  "workspace": {
+    "title": "Auto-Scholar",
+    "idle": "Enter a research topic to generate a literature review",
+    "error": "An error occurred. Please try again.",
+    "processing": "Processing your request...",
+    "edit": "Edit",
+    "preview": "Preview",
+    "reset": "Reset",
+    "resetConfirm": "Reset to original?",
+    "editing": "Editing mode - changes will be used for export",
+    "references": "References",
+    "export": "Export",
+    "exportTitle": "Export Review",
+    "exportDescription": "Choose a format and citation style to download your literature review",
+    "exportFormatLabel": "File Format",
+    "exportMarkdown": "Markdown (.md)",
+    "exportWord": "Word Document (.docx)",
+    "citationStyleLabel": "Citation Style",
+    "exportDownload": "Download",
+    "exportCancel": "Cancel",
+    "chartsTitle": "Research Analytics",
+    "chartsGenerate": "Generate Charts",
+    "chartsRefresh": "Refresh",
+    "chartYearTrend": "Publication Year Distribution",
+    "chartSourceDistribution": "Paper Sources",
+    "chartAuthorFrequency": "Top Authors"
+  },
+  "approval": {
+    "title": "Review Candidate Papers",
+    "description": "Found {count} papers. Select ones you want to include in your literature review.",
+    "selected": "{selected} of {total} papers selected",
+    "processing": "Processing...",
+    "confirm": "Confirm & Continue ({count})",
+    "cancel": "Cancel"
+  },
+  "language": {
+    "switch": "中文"
+  },
+  "errors": {
+    "networkError": "Network error. Please check your connection and try again.",
+    "timeout": "Request timed out. Please try again or reduce the number of papers.",
+    "noPapers": "No papers found for this query. Try different keywords.",
+    "draftFailed": "Failed to generate review. Please try again.",
+    "approvalFailed": "Failed to approve papers. Please try again.",
+    "exportFailed": "Export failed. Please try again.",
+    "sessionLoadFailed": "Failed to load session. Please try again.",
+    "unknownError": "An unexpected error occurred. Please try again.",
+    "retry": "Retry"
+  }
+}
