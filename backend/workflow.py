@@ -66,11 +66,11 @@ def _qa_router(state: AgentState) -> Literal["draft_node", "__end__"]:
 
 def _build_graph() -> StateGraph:
     g = StateGraph(AgentState)
-    g.add_node("plan_node", _timed_plan_node)
-    g.add_node("search_node", _timed_search_node)
-    g.add_node("read_and_extract_node", _timed_read_and_extract_node)
-    g.add_node("draft_node", _timed_draft_node)
-    g.add_node("qa_evaluator_node", _timed_qa_evaluator_node)
+    g.add_node("plan_node", _timed_plan_node)  # type: ignore[call-overload]
+    g.add_node("search_node", _timed_search_node)  # type: ignore[call-overload]
+    g.add_node("read_and_extract_node", _timed_read_and_extract_node)  # type: ignore[call-overload]
+    g.add_node("draft_node", _timed_draft_node)  # type: ignore[call-overload]
+    g.add_node("qa_evaluator_node", _timed_qa_evaluator_node)  # type: ignore[call-overload]
 
     g.add_conditional_edges(START, _entry_router)
     g.add_edge("plan_node", "search_node")
