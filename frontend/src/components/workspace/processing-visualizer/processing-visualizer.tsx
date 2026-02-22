@@ -11,12 +11,26 @@ export function ProcessingVisualizer() {
   const t = useTranslations("processing")
   const scrollRef = useRef<HTMLDivElement>(null)
   const [isUserNearBottom, setIsUserNearBottom] = useState(true)
+  const [elapsedSeconds, setElapsedSeconds] = useState<number>(0)
 
   const candidatePapers = useResearchStore((s) => s.candidatePapers)
   const selectedPaperIds = useResearchStore((s) => s.selectedPaperIds)
   const processingStage = useResearchStore((s) => s.processingStage)
   const paperProcessingStates = useResearchStore((s) => s.paperProcessingStates)
   const processingStartTime = useResearchStore((s) => s.processingStartTime)
+
+  useEffect(() => {
+    const updateElapsed = () => {
+      setElapsedSeconds(Math.floor((Date.now() - processingStartTime) / 1000))
+    }
+
+    updateElapsed()
+    const interval = setInterval(updateElapsed, 1000)
+
+    return () => {
+      clearInterval(interval)
+    }
+  }, [processingStartTime])
 
   const selectedPapers = candidatePapers.filter(p => selectedPaperIds.has(p.paper_id))
 
@@ -48,10 +62,6 @@ export function ProcessingVisualizer() {
       })
     }
   }, [paperProcessingStates, isUserNearBottom])
-
-  const elapsedSeconds = processingStartTime 
-    ? Math.floor((Date.now() - processingStartTime) / 1000)
-    : 0
 
   return (
     <div className="flex flex-col h-full bg-zinc-900 rounded-lg border border-zinc-800 overflow-hidden">
