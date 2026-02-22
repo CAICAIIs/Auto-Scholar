@@ -26,7 +26,8 @@ Auto-Scholar helps researchers quickly generate structured literature reviews. E
 ### Prerequisites
 
 - Python 3.11+
-- Node.js 18+
+- uv
+- bun
 - OpenAI API key (or compatible endpoint like DeepSeek/Zhipu)
 
 ### 1. Clone and Install
@@ -36,10 +37,10 @@ git clone https://github.com/CAICAIIs/Auto-Scholar.git
 cd Auto-Scholar
 
 # Backend
-pip install -r requirements.txt
+uv sync --extra dev
 
 # Frontend
-cd frontend && npm install && cd ..
+cd frontend && bun install && cd ..
 ```
 
 ### 2. Configure Environment
@@ -62,12 +63,12 @@ SEMANTIC_SCHOLAR_API_KEY=your-key
 
 **Terminal 1 - Backend:**
 ```bash
-uvicorn backend.main:app --reload --port 8000
+uv run uvicorn backend.main:app --reload --port 8000
 ```
 
 **Terminal 2 - Frontend:**
 ```bash
-cd frontend && npm run dev
+cd frontend && bun run dev
 ```
 
 ### 4. Open Browser
@@ -152,11 +153,21 @@ After approval, the system will:
 find backend -name '*.py' -exec python -m py_compile {} +
 
 # Frontend type check
-cd frontend && npx tsc --noEmit
+cd frontend && bun x tsc --noEmit
 
 # Run tests
-pytest tests/ -v
+uv run pytest tests/ -v
 ```
+
+## Documentation
+
+- [Documentation Index](docs/README.md)
+- [Architecture](docs/ARCHITECTURE.md)
+- [Development Guide](docs/DEVELOPMENT.md)
+- [API Reference](docs/API.md)
+- [Contributing](CONTRIBUTING.md)
+- [Code of Conduct](CODE_OF_CONDUCT.md)
+- [Security Policy](SECURITY.md)
 
 ## Contributing
 

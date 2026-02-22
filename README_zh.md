@@ -32,7 +32,8 @@ Auto-Scholar 帮助研究人员快速生成结构化的文献综述。输入研�
 ### 前置要求
 
 - Python 3.11+
-- Node.js 18+
+- uv
+- bun
 - OpenAI API 密钥（或兼容的 API 端点，如 DeepSeek/智谱）
 
 ### 1. 克隆和安装
@@ -42,10 +43,10 @@ git clone https://github.com/CAICAIIs/Auto-Scholar.git
 cd Auto-Scholar
 
 # 后端
-pip install -r requirements.txt
+uv sync --extra dev
 
 # 前端
-cd frontend && npm install && cd ..
+cd frontend && bun install && cd ..
 ```
 
 ### 2. 配置环境
@@ -68,12 +69,12 @@ SEMANTIC_SCHOLAR_API_KEY=your-key
 
 **终端 1 - 后端：**
 ```bash
-uvicorn backend.main:app --reload --port 8000
+uv run uvicorn backend.main:app --reload --port 8000
 ```
 
 **终端 2 - 前端：**
 ```bash
-cd frontend && npm run dev
+cd frontend && bun run dev
 ```
 
 ### 4. 打开浏览器
@@ -135,11 +136,21 @@ cd frontend && npm run dev
 find backend -name '*.py' -exec python -m py_compile {} +
 
 # 前端类型检查
-cd frontend && npx tsc --noEmit
+cd frontend && bun x tsc --noEmit
 
 # 运行测试
-pytest tests/ -v
+uv run pytest tests/ -v
 ```
+
+## 项目文档
+
+- [文档总览](docs/README.md)
+- [系统架构](docs/ARCHITECTURE.md)
+- [开发指南](docs/DEVELOPMENT.md)
+- [API 参考](docs/API.md)
+- [贡献指南](CONTRIBUTING.md)
+- [社区行为准则](CODE_OF_CONDUCT.md)
+- [安全策略](SECURITY.md)
 
 ## 性能指标
 

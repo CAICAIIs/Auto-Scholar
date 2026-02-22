@@ -23,7 +23,7 @@ LLM_MODEL=gpt-4o
 **终端 1 - 后端:**
 ```bash
 cd /path/to/auto-scholar
-uvicorn app.main:app --reload --port 8000
+uv run uvicorn backend.main:app --reload --port 8000
 ```
 
 看到以下输出表示启动成功：
@@ -35,7 +35,7 @@ INFO:     LangGraph workflow initialized
 **终端 2 - 前端:**
 ```bash
 cd /path/to/auto-scholar/frontend
-npm run dev
+bun run dev
 ```
 
 看到以下输出表示启动成功：
