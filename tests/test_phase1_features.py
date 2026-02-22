@@ -1,11 +1,12 @@
+import os
+import uuid
+
+import httpx
 import pytest
 import pytest_asyncio
-import httpx
-import uuid
-import os
 from dotenv import load_dotenv
 
-from backend.schemas import DraftOutput, ReviewSection, PaperMetadata
+from backend.schemas import DraftOutput, PaperMetadata, ReviewSection
 
 load_dotenv()
 
@@ -14,9 +15,10 @@ pytestmark = [pytest.mark.slow, pytest.mark.integration]
 
 @pytest_asyncio.fixture
 async def client():
+    from contextlib import asynccontextmanager
+
     from backend.main import app
     from backend.workflow import create_workflow
-    from contextlib import asynccontextmanager
 
     db_path = f"test_phase1_{uuid.uuid4().hex[:8]}.db"
 
@@ -39,10 +41,11 @@ async def client():
 
 @pytest_asyncio.fixture
 async def mocked_client():
-    from backend.main import app
-    from backend.workflow import create_workflow
     from contextlib import asynccontextmanager
     from unittest.mock import patch
+
+    from backend.main import app
+    from backend.workflow import create_workflow
 
     db_path = f"test_phase1_mock_{uuid.uuid4().hex[:8]}.db"
 
@@ -52,8 +55,9 @@ async def mocked_client():
             app.state.graph = graph
             yield
 
-    from tests.conftest import MOCK_SEMANTIC_PAPERS, MOCK_ARXIV_PAPERS, MOCK_PUBMED_PAPERS
     from unittest.mock import AsyncMock
+
+    from tests.conftest import MOCK_ARXIV_PAPERS, MOCK_PUBMED_PAPERS, MOCK_SEMANTIC_PAPERS
 
     all_papers = MOCK_SEMANTIC_PAPERS + MOCK_ARXIV_PAPERS + MOCK_PUBMED_PAPERS
 
@@ -73,7 +77,6 @@ async def mocked_client():
 
 
 class TestExportAPI:
-
     @pytest.fixture
     def sample_draft(self) -> DraftOutput:
         return DraftOutput(
@@ -127,7 +130,12 @@ class TestExportAPI:
         ]
 
     @pytest.mark.asyncio
-    async def test_export_markdown(self, client: httpx.AsyncClient, sample_draft: DraftOutput, sample_papers: list[PaperMetadata]):
+    async def test_export_markdown(
+        self,
+        client: httpx.AsyncClient,
+        sample_draft: DraftOutput,
+        sample_papers: list[PaperMetadata],
+    ):
         resp = await client.post(
             "/api/research/export?format=markdown",
             json={
@@ -150,7 +158,12 @@ class TestExportAPI:
         assert "(2023)" in content
 
     @pytest.mark.asyncio
-    async def test_export_docx(self, client: httpx.AsyncClient, sample_draft: DraftOutput, sample_papers: list[PaperMetadata]):
+    async def test_export_docx(
+        self,
+        client: httpx.AsyncClient,
+        sample_draft: DraftOutput,
+        sample_papers: list[PaperMetadata],
+    ):
         resp = await client.post(
             "/api/research/export?format=docx",
             json={
@@ -159,7 +172,10 @@ class TestExportAPI:
             },
         )
         assert resp.status_code == 200
-        assert "application/vnd.openxmlformats-officedocument.wordprocessingml.document" in resp.headers.get("content-type", "")
+        assert (
+            "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+            in resp.headers.get("content-type", "")
+        )
         assert 'filename="review.docx"' in resp.headers.get("content-disposition", "")
 
         content = resp.content
@@ -181,7 +197,12 @@ class TestExportAPI:
         assert "## References" not in content
 
     @pytest.mark.asyncio
-    async def test_export_invalid_format(self, client: httpx.AsyncClient, sample_draft: DraftOutput, sample_papers: list[PaperMetadata]):
+    async def test_export_invalid_format(
+        self,
+        client: httpx.AsyncClient,
+        sample_draft: DraftOutput,
+        sample_papers: list[PaperMetadata],
+    ):
         resp = await client.post(
             "/api/research/export?format=pdf",
             json={
@@ -193,7 +214,6 @@ class TestExportAPI:
 
 
 class TestSessionsAPI:
-
     @pytest.mark.asyncio
     async def test_list_sessions_empty(self, client: httpx.AsyncClient):
         resp = await client.get("/api/research/sessions")
@@ -290,7 +310,6 @@ class TestSessionsAPI:
 
 
 class TestErrorHandling:
-
     @pytest.mark.asyncio
     async def test_start_with_empty_query(self, client: httpx.AsyncClient):
         resp = await client.post(
@@ -359,7 +378,6 @@ class TestErrorHandling:
 
 
 class TestLanguageSupport:
-
     @pytest.mark.asyncio
     async def test_start_with_english(self, mocked_client: httpx.AsyncClient):
         resp = await mocked_client.post(
@@ -395,7 +413,6 @@ class TestLanguageSupport:
 
 
 class TestFullWorkflow:
-
     @pytest.mark.asyncio
     async def test_complete_workflow_with_export(self, mocked_client: httpx.AsyncClient):
         start_resp = await mocked_client.post(

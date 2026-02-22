@@ -1,7 +1,12 @@
 import pytest
 
-from backend.schemas import DraftOutput, ReviewSection, PaperMetadata, CitationStyle
-from backend.utils.exporter import export_to_markdown, export_to_docx, format_citation, format_references
+from backend.schemas import CitationStyle, DraftOutput, PaperMetadata, ReviewSection
+from backend.utils.exporter import (
+    export_to_docx,
+    export_to_markdown,
+    format_citation,
+    format_references,
+)
 
 
 @pytest.fixture
@@ -96,7 +101,7 @@ def test_export_to_docx_empty_papers(sample_draft: DraftOutput):
 def test_format_citation_apa(sample_papers: list[PaperMetadata]):
     paper = sample_papers[0]
     result = format_citation(paper, 1, CitationStyle.APA)
-    
+
     assert "Author A, Author B, Author C, & Author D" in result
     assert "(2023)" in result
     assert "First Paper Title" in result
@@ -106,14 +111,14 @@ def test_format_citation_apa(sample_papers: list[PaperMetadata]):
 def test_format_citation_apa_two_authors(sample_papers: list[PaperMetadata]):
     paper = sample_papers[1]
     result = format_citation(paper, 2, CitationStyle.APA)
-    
+
     assert "Author X & Author Y" in result
     assert "(2024)" in result
 
 
 def test_format_citation_apa_single_author(single_author_paper: PaperMetadata):
     result = format_citation(single_author_paper, 1, CitationStyle.APA)
-    
+
     assert "Solo Author" in result
     assert "(2022)" in result
 
@@ -121,7 +126,7 @@ def test_format_citation_apa_single_author(single_author_paper: PaperMetadata):
 def test_format_citation_mla(sample_papers: list[PaperMetadata]):
     paper = sample_papers[0]
     result = format_citation(paper, 1, CitationStyle.MLA)
-    
+
     assert "Author A, et al." in result
     assert '"First Paper Title."' in result
     assert "2023" in result
@@ -130,14 +135,14 @@ def test_format_citation_mla(sample_papers: list[PaperMetadata]):
 def test_format_citation_mla_two_authors(sample_papers: list[PaperMetadata]):
     paper = sample_papers[1]
     result = format_citation(paper, 2, CitationStyle.MLA)
-    
+
     assert "Author X, and Author Y" in result
 
 
 def test_format_citation_ieee(sample_papers: list[PaperMetadata]):
     paper = sample_papers[0]
     result = format_citation(paper, 1, CitationStyle.IEEE)
-    
+
     assert "[1]" in result
     assert "Author A et al." in result
     assert '"First Paper Title,"' in result
@@ -154,7 +159,7 @@ def test_format_citation_ieee_three_authors():
         year=2021,
     )
     result = format_citation(paper, 3, CitationStyle.IEEE)
-    
+
     assert "[3]" in result
     assert "A, B, C" in result
 
@@ -162,7 +167,7 @@ def test_format_citation_ieee_three_authors():
 def test_format_citation_gbt7714(sample_papers: list[PaperMetadata]):
     paper = sample_papers[0]
     result = format_citation(paper, 1, CitationStyle.GB_T7714)
-    
+
     assert "[1]" in result
     assert "Author A, Author B, Author C, 等" in result
     assert "[J]" in result
@@ -178,7 +183,7 @@ def test_format_citation_gbt7714_three_authors():
         year=2021,
     )
     result = format_citation(paper, 1, CitationStyle.GB_T7714)
-    
+
     assert "张三, 李四, 王五" in result
     assert "等" not in result
 
@@ -190,11 +195,13 @@ def test_format_references_all_styles(sample_papers: list[PaperMetadata]):
         assert all(isinstance(r, str) for r in refs)
 
 
-def test_export_with_different_citation_styles(sample_draft: DraftOutput, sample_papers: list[PaperMetadata]):
+def test_export_with_different_citation_styles(
+    sample_draft: DraftOutput, sample_papers: list[PaperMetadata]
+):
     for style in CitationStyle:
         md_result = export_to_markdown(sample_draft, sample_papers, style)
         assert "## References" in md_result
-        
+
         docx_result = export_to_docx(sample_draft, sample_papers, style)
         assert isinstance(docx_result, bytes)
         assert len(docx_result) > 0

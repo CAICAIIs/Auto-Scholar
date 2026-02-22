@@ -1,9 +1,10 @@
+import os
+import uuid
+from unittest.mock import AsyncMock, patch
+
+import httpx
 import pytest
 import pytest_asyncio
-import httpx
-import uuid
-import os
-from unittest.mock import patch, AsyncMock
 from dotenv import load_dotenv
 
 load_dotenv()
@@ -13,9 +14,10 @@ pytestmark = [pytest.mark.slow, pytest.mark.integration]
 
 @pytest_asyncio.fixture
 async def mocked_client():
+    from contextlib import asynccontextmanager
+
     from backend.main import app
     from backend.workflow import create_workflow
-    from contextlib import asynccontextmanager
 
     db_path = f"test_conversation_{uuid.uuid4().hex[:8]}.db"
 
@@ -47,7 +49,6 @@ async def mocked_client():
 
 
 class TestConversationMessages:
-
     @pytest.mark.asyncio
     async def test_start_creates_initial_message(self, mocked_client: httpx.AsyncClient):
         resp = await mocked_client.post(
@@ -91,7 +92,6 @@ class TestConversationMessages:
 
 
 class TestContinueEndpoint:
-
     @pytest.mark.asyncio
     async def test_continue_requires_existing_thread(self, mocked_client: httpx.AsyncClient):
         resp = await mocked_client.post(
@@ -121,7 +121,6 @@ class TestContinueEndpoint:
 
 
 class TestMultiTurnWorkflow:
-
     @pytest.mark.asyncio
     async def test_full_multi_turn_conversation(self, mocked_client: httpx.AsyncClient):
         start_resp = await mocked_client.post(
@@ -175,7 +174,6 @@ class TestMultiTurnWorkflow:
 
 
 class TestConversationContext:
-
     @pytest.mark.asyncio
     async def test_messages_have_timestamps(self, mocked_client: httpx.AsyncClient):
         resp = await mocked_client.post(

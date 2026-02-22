@@ -1,14 +1,15 @@
+from unittest.mock import AsyncMock, patch
+
 import pytest
-from unittest.mock import AsyncMock, patch, MagicMock
 
 from backend.schemas import PaperMetadata, PaperSource
 from backend.utils.fulltext_api import (
-    resolve_pdf_url,
+    _extract_pdf_from_openalex,
+    _extract_pdf_from_unpaywall,
+    _normalize_doi,
     enrich_paper_with_fulltext,
     enrich_papers_with_fulltext,
-    _normalize_doi,
-    _extract_pdf_from_unpaywall,
-    _extract_pdf_from_openalex,
+    resolve_pdf_url,
 )
 
 
@@ -109,18 +110,16 @@ def paper_without_doi() -> PaperMetadata:
 
 
 async def test_resolve_pdf_url_with_doi():
-    mock_unpaywall_response = {
-        "best_oa_location": {"pdf_url": "https://example.com/paper.pdf"}
-    }
-    
+    mock_unpaywall_response = {"best_oa_location": {"pdf_url": "https://example.com/paper.pdf"}}
+
     with patch("backend.utils.fulltext_api._fetch_json", new_callable=AsyncMock) as mock_fetch:
         mock_fetch.return_value = mock_unpaywall_response
-        
+
         pdf_url, doi = await resolve_pdf_url(
             title="Test Paper",
             doi="10.1234/test",
         )
-        
+
         assert pdf_url == "https://example.com/paper.pdf"
         assert doi == "10.1234/test"
 
@@ -131,12 +130,12 @@ async def test_resolve_pdf_url_fallback_to_openalex():
             None,
             {"open_access": {"oa_url": "https://openalex.com/paper.pdf"}},
         ]
-        
+
         pdf_url, doi = await resolve_pdf_url(
             title="Test Paper",
             doi="10.1234/test",
         )
-        
+
         assert pdf_url == "https://openalex.com/paper.pdf"
 
 
@@ -151,32 +150,36 @@ async def test_resolve_pdf_url_title_search():
                 }
             ]
         }
-        
+
         pdf_url, doi = await resolve_pdf_url(
             title="Test Paper Title",
             doi=None,
         )
-        
+
         assert pdf_url == "https://found.com/paper.pdf"
         assert doi == "10.5678/found"
 
 
 async def test_enrich_paper_with_fulltext(sample_paper: PaperMetadata):
-    with patch("backend.utils.fulltext_api.resolve_pdf_url", new_callable=AsyncMock) as mock_resolve:
+    with patch(
+        "backend.utils.fulltext_api.resolve_pdf_url", new_callable=AsyncMock
+    ) as mock_resolve:
         mock_resolve.return_value = ("https://example.com/enriched.pdf", "10.1234/test")
-        
+
         enriched = await enrich_paper_with_fulltext(sample_paper)
-        
+
         assert enriched.pdf_url == "https://example.com/enriched.pdf"
         assert enriched.doi == "10.1234/test"
 
 
 async def test_enrich_paper_already_has_pdf(sample_paper: PaperMetadata):
     paper_with_pdf = sample_paper.model_copy(update={"pdf_url": "https://existing.com/paper.pdf"})
-    
-    with patch("backend.utils.fulltext_api.resolve_pdf_url", new_callable=AsyncMock) as mock_resolve:
+
+    with patch(
+        "backend.utils.fulltext_api.resolve_pdf_url", new_callable=AsyncMock
+    ) as mock_resolve:
         enriched = await enrich_paper_with_fulltext(paper_with_pdf)
-        
+
         mock_resolve.assert_not_called()
         assert enriched.pdf_url == "https://existing.com/paper.pdf"
 
@@ -202,15 +205,17 @@ async def test_enrich_papers_with_fulltext():
             source=PaperSource.ARXIV,
         ),
     ]
-    
-    with patch("backend.utils.fulltext_api.resolve_pdf_url", new_callable=AsyncMock) as mock_resolve:
+
+    with patch(
+        "backend.utils.fulltext_api.resolve_pdf_url", new_callable=AsyncMock
+    ) as mock_resolve:
         mock_resolve.side_effect = [
             ("https://example.com/p1.pdf", "10.1/p1"),
             (None, None),
         ]
-        
+
         enriched = await enrich_papers_with_fulltext(papers, concurrency=2)
-        
+
         assert len(enriched) == 2
         assert enriched[0].pdf_url == "https://example.com/p1.pdf"
         assert enriched[0].doi == "10.1/p1"

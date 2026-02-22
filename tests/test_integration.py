@@ -1,7 +1,8 @@
+import uuid
+
+import httpx
 import pytest
 import pytest_asyncio
-import httpx
-import uuid
 from dotenv import load_dotenv
 
 load_dotenv()
@@ -11,9 +12,10 @@ pytestmark = [pytest.mark.slow, pytest.mark.integration]
 
 @pytest_asyncio.fixture
 async def client():
+    from contextlib import asynccontextmanager
+
     from backend.main import app
     from backend.workflow import create_workflow
-    from contextlib import asynccontextmanager
 
     db_path = f"test_checkpoints_{uuid.uuid4().hex[:8]}.db"
 
@@ -31,6 +33,7 @@ async def client():
             yield c
 
     import os
+
     if os.path.exists(db_path):
         os.remove(db_path)
 
@@ -54,7 +57,7 @@ async def test_full_workflow(client: httpx.AsyncClient):
     assert len(candidate_papers) > 0, "Should have found candidate papers"
     assert len(logs) >= 2, f"Should have at least 2 log entries (plan + search), got: {logs}"
 
-    print(f"\n=== START ===")
+    print("\n=== START ===")
     print(f"Thread: {thread_id}")
     print(f"Candidates: {len(candidate_papers)}")
     print(f"Logs: {logs}")
@@ -67,14 +70,14 @@ async def test_full_workflow(client: httpx.AsyncClient):
         f"Should be waiting at read_and_extract_node, got: {status['next_nodes']}"
     )
 
-    print(f"\n=== STATUS ===")
+    print("\n=== STATUS ===")
     print(f"Next: {status['next_nodes']}")
 
     # Step 3: Approve first 3 papers (or all if fewer)
     papers_to_approve = candidate_papers[:3]
     paper_ids = [p["paper_id"] for p in papers_to_approve]
 
-    print(f"\n=== APPROVING ===")
+    print("\n=== APPROVING ===")
     print(f"Approving {len(paper_ids)} papers: {paper_ids}")
 
     resp = await client.post(
@@ -92,7 +95,7 @@ async def test_full_workflow(client: httpx.AsyncClient):
     assert draft["title"], "Draft should have a title"
     assert len(draft["sections"]) > 0, "Draft should have sections"
 
-    print(f"\n=== DRAFT ===")
+    print("\n=== DRAFT ===")
     print(f"Title: {draft['title']}")
     print(f"Sections: {len(draft['sections'])}")
     for section in draft["sections"]:
@@ -103,7 +106,9 @@ async def test_full_workflow(client: httpx.AsyncClient):
     for log in all_logs:
         print(f"  {log}")
 
-    assert len(all_logs) >= 3, f"Should have at least 3 log entries (extract, draft, QA), got {len(all_logs)}"
+    assert len(all_logs) >= 3, (
+        f"Should have at least 3 log entries (extract, draft, QA), got {len(all_logs)}"
+    )
 
 
 @pytest.mark.asyncio
@@ -165,7 +170,7 @@ async def test_stream_endpoint(client: httpx.AsyncClient):
                     break
 
         assert len(events) > 0, "Should have received SSE events"
-        print(f"\n=== STREAM TEST ===")
+        print("\n=== STREAM TEST ===")
         print(f"Received {len(events)} SSE events")
         for e in events[:5]:
             print(f"  {e[:100]}...")

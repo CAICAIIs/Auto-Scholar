@@ -1,8 +1,9 @@
+import os
+import uuid
+
+import httpx
 import pytest
 import pytest_asyncio
-import httpx
-import uuid
-import os
 from dotenv import load_dotenv
 
 load_dotenv()
@@ -12,9 +13,10 @@ pytestmark = [pytest.mark.slow, pytest.mark.integration]
 
 @pytest_asyncio.fixture
 async def client():
+    from contextlib import asynccontextmanager
+
     from backend.main import app
     from backend.workflow import create_workflow
-    from contextlib import asynccontextmanager
 
     db_path = f"test_phase2_{uuid.uuid4().hex[:8]}.db"
 
@@ -37,10 +39,11 @@ async def client():
 
 @pytest_asyncio.fixture
 async def mocked_client():
+    from contextlib import asynccontextmanager
+    from unittest.mock import AsyncMock, patch
+
     from backend.main import app
     from backend.workflow import create_workflow
-    from contextlib import asynccontextmanager
-    from unittest.mock import patch, AsyncMock
 
     db_path = f"test_phase2_mock_{uuid.uuid4().hex[:8]}.db"
 
@@ -50,12 +53,14 @@ async def mocked_client():
             app.state.graph = graph
             yield
 
-    from tests.conftest import MOCK_SEMANTIC_PAPERS, MOCK_ARXIV_PAPERS, MOCK_PUBMED_PAPERS
+    from tests.conftest import MOCK_ARXIV_PAPERS, MOCK_PUBMED_PAPERS, MOCK_SEMANTIC_PAPERS
 
     async with test_lifespan(app):
         with patch(
             "backend.utils.scholar_api.search_papers_multi_source",
-            new=AsyncMock(return_value=MOCK_SEMANTIC_PAPERS + MOCK_ARXIV_PAPERS + MOCK_PUBMED_PAPERS),
+            new=AsyncMock(
+                return_value=MOCK_SEMANTIC_PAPERS + MOCK_ARXIV_PAPERS + MOCK_PUBMED_PAPERS
+            ),
         ):
             async with httpx.AsyncClient(
                 transport=httpx.ASGITransport(app=app),
@@ -68,7 +73,6 @@ async def mocked_client():
 
 
 class TestMultiSourceAPI:
-
     @pytest.mark.asyncio
     async def test_start_with_semantic_scholar_only(self, mocked_client: httpx.AsyncClient):
         resp = await mocked_client.post(
@@ -197,7 +201,6 @@ class TestMultiSourceAPI:
 
 
 class TestMultiSourceWorkflow:
-
     @pytest.mark.asyncio
     async def test_full_workflow_with_arxiv(self, mocked_client: httpx.AsyncClient):
         start_resp = await mocked_client.post(
@@ -259,7 +262,6 @@ class TestMultiSourceWorkflow:
 
 
 class TestPaperSourceField:
-
     @pytest.mark.asyncio
     async def test_paper_has_source_field(self, mocked_client: httpx.AsyncClient):
         resp = await mocked_client.post(

@@ -1,5 +1,7 @@
 import asyncio
+
 import pytest
+
 from backend.utils.event_queue import StreamingEventQueue
 
 

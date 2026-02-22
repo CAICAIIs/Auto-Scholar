@@ -1,19 +1,16 @@
+from unittest.mock import AsyncMock, MagicMock, patch
+
 import pytest
-import pytest_asyncio
-import aiohttp
-from unittest.mock import AsyncMock, patch, MagicMock
 
 from backend.schemas import PaperMetadata, PaperSource
 from backend.utils.scholar_api import (
-    search_arxiv,
-    search_pubmed,
-    search_semantic_scholar,
-    search_papers_multi_source,
-    deduplicate_papers,
     _parse_arxiv_papers,
     _parse_pubmed_papers,
+    deduplicate_papers,
+    search_arxiv,
+    search_papers_multi_source,
+    search_pubmed,
 )
-
 
 SAMPLE_ARXIV_XML = """<?xml version="1.0" encoding="UTF-8"?>
 <feed xmlns="http://www.w3.org/2005/Atom">
@@ -35,11 +32,7 @@ SAMPLE_ARXIV_XML = """<?xml version="1.0" encoding="UTF-8"?>
 </feed>"""
 
 
-SAMPLE_PUBMED_ESEARCH = {
-    "esearchresult": {
-        "idlist": ["12345678", "87654321"]
-    }
-}
+SAMPLE_PUBMED_ESEARCH = {"esearchresult": {"idlist": ["12345678", "87654321"]}}
 
 
 SAMPLE_PUBMED_ESUMMARY = {
@@ -47,31 +40,30 @@ SAMPLE_PUBMED_ESUMMARY = {
         "12345678": {
             "title": "PubMed Test Paper One",
             "authors": [{"name": "Smith J"}, {"name": "Doe A"}],
-            "pubdate": "2023 Jan"
+            "pubdate": "2023 Jan",
         },
         "87654321": {
             "title": "PubMed Test Paper Two",
             "authors": [{"name": "Brown B"}],
-            "pubdate": "2024 Mar"
-        }
+            "pubdate": "2024 Mar",
+        },
     }
 }
 
 
 class TestArxivParsing:
-
     def test_parse_arxiv_papers_valid_xml(self):
         papers = _parse_arxiv_papers(SAMPLE_ARXIV_XML)
-        
+
         assert len(papers) == 2
-        
+
         assert papers[0].paper_id == "arxiv:2301.00001v1"
         assert papers[0].title == "Test Paper on Deep Learning"
         assert "deep learning" in papers[0].abstract.lower()
         assert papers[0].authors == ["John Doe", "Jane Smith"]
         assert papers[0].year == 2023
         assert papers[0].source == PaperSource.ARXIV
-        
+
         assert papers[1].paper_id == "arxiv:2301.00002v1"
         assert papers[1].authors == ["Alice Brown"]
 
@@ -83,12 +75,11 @@ class TestArxivParsing:
 
 
 class TestPubMedParsing:
-
     def test_parse_pubmed_papers_valid_data(self):
         papers = _parse_pubmed_papers(SAMPLE_PUBMED_ESUMMARY, ["12345678", "87654321"])
-        
+
         assert len(papers) == 2
-        
+
         assert papers[0].paper_id == "pubmed:12345678"
         assert papers[0].title == "PubMed Test Paper One"
         assert papers[0].authors == ["Smith J", "Doe A"]
@@ -106,7 +97,6 @@ class TestPubMedParsing:
 
 
 class TestDeduplication:
-
     def test_deduplicate_by_paper_id(self):
         papers = [
             PaperMetadata(
@@ -126,7 +116,7 @@ class TestDeduplication:
                 source=PaperSource.ARXIV,
             ),
         ]
-        
+
         result = deduplicate_papers(papers)
         assert len(result) == 1
         assert result[0].paper_id == "paper1"
@@ -150,7 +140,7 @@ class TestDeduplication:
                 source=PaperSource.SEMANTIC_SCHOLAR,
             ),
         ]
-        
+
         result = deduplicate_papers(papers)
         assert len(result) == 1
         assert result[0].source == PaperSource.SEMANTIC_SCHOLAR
@@ -182,7 +172,7 @@ class TestDeduplication:
                 source=PaperSource.PUBMED,
             ),
         ]
-        
+
         result = deduplicate_papers(papers)
         assert len(result) == 3
 
@@ -192,7 +182,6 @@ class TestDeduplication:
 
 
 class TestSearchArxiv:
-
     @pytest.mark.asyncio
     async def test_search_arxiv_success(self):
         mock_response = AsyncMock()
@@ -206,13 +195,12 @@ class TestSearchArxiv:
 
         with patch("backend.utils.scholar_api.get_session", return_value=mock_session):
             papers = await search_arxiv(["deep learning"], limit_per_query=10)
-            
+
             assert len(papers) == 2
             assert all(p.source == PaperSource.ARXIV for p in papers)
 
 
 class TestSearchPubMed:
-
     @pytest.mark.asyncio
     async def test_search_pubmed_success(self):
         mock_esearch_response = AsyncMock()
@@ -232,13 +220,12 @@ class TestSearchPubMed:
 
         with patch("backend.utils.scholar_api.get_session", return_value=mock_session):
             papers = await search_pubmed(["cancer treatment"], limit_per_query=10)
-            
+
             assert len(papers) == 2
             assert all(p.source == PaperSource.PUBMED for p in papers)
 
 
 class TestMultiSourceSearch:
-
     @pytest.mark.asyncio
     async def test_multi_source_combines_results(self):
         arxiv_papers = [
@@ -274,12 +261,18 @@ class TestMultiSourceSearch:
 
         with patch("backend.utils.scholar_api.search_arxiv", return_value=arxiv_papers):
             with patch("backend.utils.scholar_api.search_pubmed", return_value=pubmed_papers):
-                with patch("backend.utils.scholar_api.search_semantic_scholar", return_value=ss_papers):
+                with patch(
+                    "backend.utils.scholar_api.search_semantic_scholar", return_value=ss_papers
+                ):
                     papers = await search_papers_multi_source(
                         ["test query"],
-                        sources=[PaperSource.SEMANTIC_SCHOLAR, PaperSource.ARXIV, PaperSource.PUBMED],
+                        sources=[
+                            PaperSource.SEMANTIC_SCHOLAR,
+                            PaperSource.ARXIV,
+                            PaperSource.PUBMED,
+                        ],
                     )
-                    
+
                     assert len(papers) == 3
                     sources_found = {p.source for p in papers}
                     assert PaperSource.ARXIV in sources_found
@@ -304,7 +297,7 @@ class TestMultiSourceSearch:
                 ["test"],
                 sources=[PaperSource.SEMANTIC_SCHOLAR],
             )
-            
+
             assert len(papers) == 1
             assert papers[0].source == PaperSource.SEMANTIC_SCHOLAR
 
@@ -328,12 +321,14 @@ class TestMultiSourceSearch:
         )
 
         with patch("backend.utils.scholar_api.search_arxiv", return_value=[arxiv_paper]):
-            with patch("backend.utils.scholar_api.search_semantic_scholar", return_value=[ss_paper]):
+            with patch(
+                "backend.utils.scholar_api.search_semantic_scholar", return_value=[ss_paper]
+            ):
                 papers = await search_papers_multi_source(
                     ["test"],
                     sources=[PaperSource.SEMANTIC_SCHOLAR, PaperSource.ARXIV],
                 )
-                
+
                 assert len(papers) == 1
                 assert papers[0].source == PaperSource.SEMANTIC_SCHOLAR
 
@@ -357,6 +352,6 @@ class TestMultiSourceSearch:
 
         with patch("backend.utils.scholar_api.search_semantic_scholar", return_value=ss_papers):
             papers = await search_papers_multi_source(["test"])
-            
+
             assert len(papers) == 1
             assert papers[0].source == PaperSource.SEMANTIC_SCHOLAR

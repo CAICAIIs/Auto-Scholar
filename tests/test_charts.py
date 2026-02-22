@@ -1,12 +1,13 @@
-import pytest
 import base64
+
+import pytest
 
 from backend.schemas import PaperMetadata, PaperSource
 from backend.utils.charts import (
-    generate_year_trend_chart,
-    generate_source_distribution_chart,
-    generate_author_frequency_chart,
     generate_all_charts,
+    generate_author_frequency_chart,
+    generate_source_distribution_chart,
+    generate_year_trend_chart,
 )
 
 
@@ -54,10 +55,10 @@ def sample_papers() -> list[PaperMetadata]:
 
 def test_generate_year_trend_chart(sample_papers: list[PaperMetadata]):
     result = generate_year_trend_chart(sample_papers)
-    
+
     assert result is not None
     decoded = base64.b64decode(result)
-    assert decoded[:8] == b'\x89PNG\r\n\x1a\n'
+    assert decoded[:8] == b"\x89PNG\r\n\x1a\n"
 
 
 def test_generate_year_trend_chart_empty():
@@ -83,10 +84,10 @@ def test_generate_year_trend_chart_no_years():
 
 def test_generate_source_distribution_chart(sample_papers: list[PaperMetadata]):
     result = generate_source_distribution_chart(sample_papers)
-    
+
     assert result is not None
     decoded = base64.b64decode(result)
-    assert decoded[:8] == b'\x89PNG\r\n\x1a\n'
+    assert decoded[:8] == b"\x89PNG\r\n\x1a\n"
 
 
 def test_generate_source_distribution_chart_empty():
@@ -96,10 +97,10 @@ def test_generate_source_distribution_chart_empty():
 
 def test_generate_author_frequency_chart(sample_papers: list[PaperMetadata]):
     result = generate_author_frequency_chart(sample_papers)
-    
+
     assert result is not None
     decoded = base64.b64decode(result)
-    assert decoded[:8] == b'\x89PNG\r\n\x1a\n'
+    assert decoded[:8] == b"\x89PNG\r\n\x1a\n"
 
 
 def test_generate_author_frequency_chart_empty():
@@ -125,11 +126,11 @@ def test_generate_author_frequency_chart_no_authors():
 
 def test_generate_all_charts(sample_papers: list[PaperMetadata]):
     result = generate_all_charts(sample_papers)
-    
+
     assert "year_trend" in result
     assert "source_distribution" in result
     assert "author_frequency" in result
-    
+
     assert result["year_trend"] is not None
     assert result["source_distribution"] is not None
     assert result["author_frequency"] is not None
@@ -137,7 +138,7 @@ def test_generate_all_charts(sample_papers: list[PaperMetadata]):
 
 def test_generate_all_charts_empty():
     result = generate_all_charts([])
-    
+
     assert result["year_trend"] is None
     assert result["source_distribution"] is None
     assert result["author_frequency"] is None
