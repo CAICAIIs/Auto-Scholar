@@ -1,7 +1,7 @@
 # Backend Dockerfile for Auto-Scholar
-# FastAPI + LangGraph backend
+# FastAPI + LangGraph backend (uv-based)
 
-FROM python:3.11-slim
+FROM ghcr.io/astral-sh/uv:python3.11-bookworm-slim
 
 WORKDIR /app
 
@@ -10,12 +10,13 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     gcc \
     && rm -rf /var/lib/apt/lists/*
 
-# Copy requirements first for better caching
-COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
+# Copy metadata and lockfile first for better caching
+COPY pyproject.toml uv.lock ./
+RUN uv sync --frozen --no-dev --no-install-project
 
 # Copy application code
 COPY backend/ ./backend/
+RUN uv sync --frozen --no-dev
 
 # Create non-root user for security (principle of least privilege)
 # UID 1000 is standard for first non-root user
@@ -35,4 +36,4 @@ USER appuser
 EXPOSE 8000
 
 # Run the application
-CMD ["uvicorn", "backend.main:app", "--host", "0.0.0.0", "--port", "8000"]
+CMD ["uv", "run", "uvicorn", "backend.main:app", "--host", "0.0.0.0", "--port", "8000"]

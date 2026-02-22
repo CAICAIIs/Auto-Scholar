@@ -6,7 +6,7 @@
 
 ```bash
 # Backend
-pip install -r requirements.txt              # Install deps
+uv sync --extra dev                        # Install deps
 find backend -name '*.py' -exec python -m py_compile {} +  # Compile check all
 python -m py_compile backend/schemas.py      # Compile check single file
 ruff check backend/                          # Lint all
@@ -14,26 +14,26 @@ ruff check backend/main.py                   # Lint single file
 ruff format backend/ --check                 # Check formatting
 
 # Backend tests (pytest)
-pytest tests/ -v                             # Run all tests
-pytest tests/test_integration.py -v          # Run single file
-pytest tests/test_integration.py::test_full_workflow -v  # Run single test
-pytest tests/test_exporter.py::test_export_markdown -v   # Another example
-pytest -x                                    # Stop on first failure
+uv run pytest tests/ -v                             # Run all tests
+uv run pytest tests/test_integration.py -v          # Run single file
+uv run pytest tests/test_integration.py::test_full_workflow -v  # Run single test
+uv run pytest tests/test_exporter.py::test_export_markdown -v   # Another example
+uv run pytest -x                                    # Stop on first failure
 
 # Frontend
-cd frontend && npm install                   # Install deps
-cd frontend && npm run build                 # Production build
-cd frontend && npx tsc --noEmit              # Type check
-cd frontend && npm run lint                  # ESLint
+cd frontend && bun install                   # Install deps
+cd frontend && bun run build                 # Production build
+cd frontend && bun x tsc --noEmit            # Type check
+cd frontend && bun run lint                  # ESLint
 
 # Frontend tests (vitest + playwright)
-cd frontend && npm test                      # Run unit tests (vitest)
-cd frontend && npm test -- src/__tests__/store.test.ts  # Single test file
-cd frontend && npm run test:e2e              # Run E2E tests (playwright)
+cd frontend && bun test                      # Run unit tests (vitest)
+cd frontend && bun test src/__tests__/store.test.ts      # Single test file
+cd frontend && bun run test:e2e              # Run E2E tests (playwright)
 
 # DO NOT run these from agents (long-running):
 # uvicorn backend.main:app --reload --port 8000
-# cd frontend && npm run dev
+# cd frontend && bun run dev
 ```
 
 ## Project Structure
@@ -158,8 +158,8 @@ auto-scholar/
 - Cleanup runs automatically via setup.ts
 
 ### E2E (playwright)
-- `npm run test:e2e` for headless
-- `npm run test:e2e:ui` for UI mode
+- `bun run test:e2e` for headless
+- `bun run test:e2e:ui` for UI mode
 
 ## Pre-Commit Checklist (MANDATORY)
 
@@ -172,8 +172,8 @@ ruff format backend/ --check                 # Format - must show "X files alrea
 find backend -name '*.py' -exec python -m py_compile {} +  # Compile check
 
 # Frontend (ALL must pass)
-cd frontend && npx tsc --noEmit              # Type check - must exit 0
-cd frontend && npm run lint                  # ESLint - warnings OK, errors NOT OK
+cd frontend && bun x tsc --noEmit            # Type check - must exit 0
+cd frontend && bun run lint                  # ESLint - warnings OK, errors NOT OK
 ```
 
 **If any check fails:**

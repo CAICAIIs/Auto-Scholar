@@ -6,7 +6,7 @@ import { AgentConsole } from "@/components/console"
 import { Workspace } from "@/components/workspace"
 import { ApprovalModal } from "@/components/approval"
 import { useResearchStore } from "@/store/research"
-import { startResearch, approveResearch, continueResearch, createSSEConnection } from "@/lib/api"
+import { startResearch, approveResearch, continueResearch } from "@/lib/api"
 import type { ConversationMessage } from "@/types"
 
 export default function Home() {
@@ -32,14 +32,15 @@ export default function Home() {
   const clearProcessingStates = useResearchStore((s) => s.clearProcessingStates)
 
   useEffect(() => {
+    const cleanup = sseCleanupRef.current
     return () => {
-      if (sseCleanupRef.current) {
-        sseCleanupRef.current()
+      if (cleanup) {
+        cleanup()
       }
     }
   }, [])
 
-  const getErrorMessage = (err: unknown): string => {
+  const getErrorMessage = useCallback((err: unknown): string => {
     if (err instanceof Error) {
       const msg = err.message.toLowerCase()
       const originalMsg = err.message
@@ -53,7 +54,7 @@ export default function Home() {
       return `${t('unknownError')} (${originalMsg})`
     }
     return t('unknownError')
-  }
+  }, [t])
 
   const handleStartResearch = useCallback(async (query: string) => {
     reset()
@@ -91,7 +92,7 @@ export default function Home() {
       setError(message)
       addLog("error", message)
     }
-  }, [reset, clearLogs, clearMessages, setStatus, addLog, addMessage, setThreadId, setCandidatePapers, setError, outputLanguage, searchSources, t])
+  }, [reset, clearLogs, clearMessages, setStatus, addLog, addMessage, setThreadId, setCandidatePapers, setError, outputLanguage, searchSources, getErrorMessage, t])
 
   const handleApprove = useCallback(async (paperIds: string[]) => {
     const threadId = useResearchStore.getState().threadId
@@ -136,7 +137,7 @@ export default function Home() {
       setError(message)
       addLog("error", message)
     }
-  }, [setStatus, addLog, setApprovedPapers, setDraft, setError, addMessage, startProcessingSimulation, clearProcessingStates, t])
+  }, [setStatus, addLog, setApprovedPapers, setDraft, setError, addMessage, startProcessingSimulation, clearProcessingStates, getErrorMessage, t])
 
   const handleContinueResearch = useCallback(async (message: string) => {
     const threadId = useResearchStore.getState().threadId
@@ -174,7 +175,7 @@ export default function Home() {
       setError(message)
       addLog("error", message)
     }
-  }, [setStatus, addLog, addMessage, setDraft, setCandidatePapers, setError, t])
+  }, [setStatus, addLog, addMessage, setDraft, setCandidatePapers, setError, getErrorMessage, t])
 
   const handleRetry = useCallback(() => {
     if (lastQuery) {
