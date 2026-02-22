@@ -552,15 +552,12 @@ async def writer_agent(state: AgentState) -> dict[str, Any]:
             len(outline.section_titles),
         )
 
-        sections: list[ReviewSection] = []
-        for i, section_title in enumerate(outline.section_titles, 1):
-            logger.info(
-                "writer_agent: generating section %d/%d: %s",
-                i,
-                len(outline.section_titles),
-                section_title,
-            )
-            section = await _generate_section(
+        logger.info(
+            "writer_agent: generating %d sections in parallel",
+            len(outline.section_titles),
+        )
+        section_tasks = [
+            _generate_section(
                 section_title=section_title,
                 section_num=i,
                 total_sections=len(outline.section_titles),
@@ -570,7 +567,20 @@ async def writer_agent(state: AgentState) -> dict[str, Any]:
                 language_name=language_name,
                 num_papers=num_papers,
             )
-            sections.append(section)
+            for i, section_title in enumerate(outline.section_titles, 1)
+        ]
+        section_results = await asyncio.gather(*section_tasks, return_exceptions=True)
+
+        sections: list[ReviewSection] = []
+        for i, result in enumerate(section_results):
+            title = outline.section_titles[i]
+            if isinstance(result, BaseException):
+                logger.error("writer_agent: section '%s' generation failed: %s", title, result)
+                sections.append(
+                    ReviewSection(heading=title, content=f"[Generation failed: {result}]")
+                )
+            else:
+                sections.append(result)
 
         draft = DraftOutput(title=outline.title, sections=sections)
 
