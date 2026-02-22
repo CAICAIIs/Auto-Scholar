@@ -13,6 +13,7 @@ import pytest
 from unittest.mock import AsyncMock, patch
 
 from app.schemas import PaperMetadata, PaperSource
+from app.utils.http_pool import close_session
 import app.utils.http_pool as http_pool
 
 
@@ -24,9 +25,7 @@ async def reset_http_session():
     """
     http_pool._session = None
     yield
-    if http_pool._session is not None and not http_pool._session.closed:
-        await http_pool._session.close()
-    http_pool._session = None
+    await close_session()
 
 
 # Mock paper data matching PaperMetadata schema from app/schemas.py

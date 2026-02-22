@@ -5,6 +5,14 @@ from typing import Any
 
 from pydantic import BaseModel
 
+from app.constants import (
+    MAX_KEYWORDS,
+    PAPERS_PER_QUERY,
+    LLM_CONCURRENCY,
+    FULLTEXT_CONCURRENCY,
+    MAX_CONVERSATION_TURNS,
+    get_draft_max_tokens,
+)
 from app.schemas import PaperMetadata, DraftOutput, PaperSource, ConversationMessage, MessageRole
 from app.state import AgentState
 from app.utils.llm_client import structured_completion
@@ -22,7 +30,7 @@ class ContributionExtraction(BaseModel):
     core_contribution: str
 
 
-def _build_conversation_context(messages: list[ConversationMessage], max_turns: int = 5) -> str:
+def _build_conversation_context(messages: list[ConversationMessage], max_turns: int = MAX_CONVERSATION_TURNS) -> str:
     if not messages:
         return ""
     recent = messages[-max_turns * 2:] if len(messages) > max_turns * 2 else messages
@@ -64,7 +72,7 @@ async def plan_node(state: AgentState) -> dict[str, Any]:
         response_model=KeywordPlan,
     )
 
-    keywords = result.keywords[:5]
+    keywords = result.keywords[:MAX_KEYWORDS]
     log_msg = f"Generated {len(keywords)} search keywords: {keywords}"
     logger.info("plan_node: %s", log_msg)
     return {"search_keywords": keywords, "logs": [log_msg]}
@@ -81,7 +89,7 @@ async def search_node(state: AgentState) -> dict[str, Any]:
     source_names = [s.value for s in sources]
     
     logger.info("search_node: searching %d keywords across %s", len(keywords), source_names)
-    papers = await search_papers_multi_source(keywords, sources=sources, limit_per_query=10)
+    papers = await search_papers_multi_source(keywords, sources=sources, limit_per_query=PAPERS_PER_QUERY)
 
     log_msg = f"Found {len(papers)} unique papers across {len(keywords)} queries from {source_names}"
     logger.info("search_node: %s", log_msg)
@@ -129,7 +137,7 @@ async def read_and_extract_node(state: AgentState) -> dict[str, Any]:
 
     logger.info("read_and_extract_node: extracting contributions from %d papers", len(approved))
 
-    semaphore = asyncio.Semaphore(2)
+    semaphore = asyncio.Semaphore(LLM_CONCURRENCY)
     async def extract_with_limit(paper: PaperMetadata) -> PaperMetadata:
         async with semaphore:
             return await _extract_contribution(paper)
@@ -162,7 +170,7 @@ async def read_and_extract_node(state: AgentState) -> dict[str, Any]:
     if papers_needing_pdf:
         logger.info("read_and_extract_node: enriching %d papers with full-text URLs", len(papers_needing_pdf))
         try:
-            enriched = await enrich_papers_with_fulltext(extracted, concurrency=3)
+            enriched = await enrich_papers_with_fulltext(extracted, concurrency=FULLTEXT_CONCURRENCY)
             pdf_count = sum(1 for p in enriched if p.pdf_url)
             pdf_log = f"Found full-text PDFs for {pdf_count}/{len(enriched)} papers"
             logger.info("read_and_extract_node: %s", pdf_log)
@@ -273,7 +281,7 @@ async def draft_node(state: AgentState) -> dict[str, Any]:
             },
         ],
         response_model=DraftOutput,
-        max_tokens=min(4000, 1000 + num_papers * 150),
+        max_tokens=get_draft_max_tokens(num_papers),
     )
 
     cite_pattern = re.compile(r'\{cite:(\d+)\}')
