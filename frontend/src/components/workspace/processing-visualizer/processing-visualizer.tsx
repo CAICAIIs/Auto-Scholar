@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useRef } from "react"
+import { useEffect, useRef, useState } from "react"
 import { useResearchStore } from "@/store/research"
 import { PaperCard } from "./paper-card"
 import { StageIndicator } from "./stage-indicator"
@@ -9,7 +9,8 @@ import { useTranslations } from "next-intl"
 export function ProcessingVisualizer() {
   const t = useTranslations("processing")
   const scrollRef = useRef<HTMLDivElement>(null)
-  
+  const [isUserNearBottom, setIsUserNearBottom] = useState(true)
+
   const candidatePapers = useResearchStore((s) => s.candidatePapers)
   const selectedPaperIds = useResearchStore((s) => s.selectedPaperIds)
   const processingStage = useResearchStore((s) => s.processingStage)
@@ -17,18 +18,35 @@ export function ProcessingVisualizer() {
   const processingStartTime = useResearchStore((s) => s.processingStartTime)
 
   const selectedPapers = candidatePapers.filter(p => selectedPaperIds.has(p.paper_id))
-  
+
   const completedCount = Array.from(paperProcessingStates.values())
     .filter(s => s.status === "completed").length
 
+  const checkUserScrollPosition = () => {
+    if (!scrollRef.current) return
+    const { scrollTop, scrollHeight, clientHeight } = scrollRef.current
+    const distanceFromBottom = scrollHeight - scrollTop - clientHeight
+    setIsUserNearBottom(distanceFromBottom < 100)
+  }
+
   useEffect(() => {
-    if (scrollRef.current) {
+    const scrollElement = scrollRef.current
+    if (!scrollElement) return
+
+    scrollElement.addEventListener("scroll", checkUserScrollPosition)
+    return () => {
+      scrollElement.removeEventListener("scroll", checkUserScrollPosition)
+    }
+  }, [])
+
+  useEffect(() => {
+    if (scrollRef.current && isUserNearBottom) {
       scrollRef.current.scrollTo({
         top: scrollRef.current.scrollHeight,
         behavior: "smooth"
       })
     }
-  }, [paperProcessingStates])
+  }, [paperProcessingStates, isUserNearBottom])
 
   const elapsedSeconds = processingStartTime 
     ? Math.floor((Date.now() - processingStartTime) / 1000)
