@@ -109,6 +109,47 @@ class PaperMetadata(BaseModel):
     source: PaperSource = PaperSource.SEMANTIC_SCHOLAR
 
 
+class EntailmentLabel(StrEnum):
+    """Three-way entailment labels for claim verification."""
+
+    ENTAILS = "entails"  # Citation supports the claim
+    INSUFFICIENT = "insufficient"  # Citation doesn't provide enough evidence
+    CONTRADICTS = "contradicts"  # Citation contradicts the claim
+
+
+class Claim(BaseModel):
+    """An atomic claim extracted from the review text."""
+
+    claim_id: str
+    text: str  # The claim text
+    section_index: int  # Which section this claim belongs to
+    citation_indices: list[int] = []  # Paper indices cited (1-based)
+
+
+class ClaimVerificationResult(BaseModel):
+    """Result of verifying a single claim against its cited papers."""
+
+    claim_id: str
+    claim_text: str
+    citation_index: int  # The paper index being verified (1-based)
+    paper_title: str  # Title of the cited paper
+    label: EntailmentLabel
+    confidence: float = Field(ge=0.0, le=1.0)
+    evidence_snippet: str = ""  # Relevant snippet from paper that supports/contradicts
+    rationale: str = ""  # Brief explanation of the verdict
+
+
+class ClaimVerificationSummary(BaseModel):
+    """Summary of all claim verifications for a draft."""
+
+    total_claims: int
+    total_verifications: int
+    entails_count: int
+    insufficient_count: int
+    contradicts_count: int
+    failed_verifications: list[ClaimVerificationResult] = []
+
+
 class ReviewSection(BaseModel):
     heading: str
     content: str
