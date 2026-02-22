@@ -40,6 +40,12 @@ ENV/
 .coverage
 htmlcov/
 test_checkpoints_*.db
+test_conversation_*.db
+test_conversation_*.db-shm
+test_conversation_*.db-wal
+checkpoints.db
+checkpoints.db-shm
+checkpoints.db-wal
 
 # Project specific - DO NOT UPLOAD
 
@@ -59,4 +65,4 @@ npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
 proposal.md
-proposal.md
+INTERVIEW_STORIES.md
