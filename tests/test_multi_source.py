@@ -201,13 +201,10 @@ class TestSearchArxiv:
         mock_response.__aenter__ = AsyncMock(return_value=mock_response)
         mock_response.__aexit__ = AsyncMock(return_value=None)
 
-        with patch("aiohttp.ClientSession") as mock_session_class:
-            mock_session = MagicMock()
-            mock_session.get = MagicMock(return_value=mock_response)
-            mock_session.__aenter__ = AsyncMock(return_value=mock_session)
-            mock_session.__aexit__ = AsyncMock(return_value=None)
-            mock_session_class.return_value = mock_session
+        mock_session = MagicMock()
+        mock_session.get = MagicMock(return_value=mock_response)
 
+        with patch("app.utils.scholar_api.get_session", return_value=mock_session):
             papers = await search_arxiv(["deep learning"], limit_per_query=10)
             
             assert len(papers) == 2
@@ -230,13 +227,10 @@ class TestSearchPubMed:
         mock_esummary_response.__aenter__ = AsyncMock(return_value=mock_esummary_response)
         mock_esummary_response.__aexit__ = AsyncMock(return_value=None)
 
-        with patch("aiohttp.ClientSession") as mock_session_class:
-            mock_session = MagicMock()
-            mock_session.get = MagicMock(side_effect=[mock_esearch_response, mock_esummary_response])
-            mock_session.__aenter__ = AsyncMock(return_value=mock_session)
-            mock_session.__aexit__ = AsyncMock(return_value=None)
-            mock_session_class.return_value = mock_session
+        mock_session = MagicMock()
+        mock_session.get = MagicMock(side_effect=[mock_esearch_response, mock_esummary_response])
 
+        with patch("app.utils.scholar_api.get_session", return_value=mock_session):
             papers = await search_pubmed(["cancer treatment"], limit_per_query=10)
             
             assert len(papers) == 2

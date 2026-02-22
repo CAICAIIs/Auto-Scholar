@@ -13,6 +13,20 @@ import pytest
 from unittest.mock import AsyncMock, patch
 
 from app.schemas import PaperMetadata, PaperSource
+import app.utils.http_pool as http_pool
+
+
+@pytest.fixture(autouse=True)
+async def reset_http_session():
+    """Reset the shared HTTP session before each test.
+    
+    This prevents 'Event loop is closed' errors when tests run in different event loops.
+    """
+    http_pool._session = None
+    yield
+    if http_pool._session is not None and not http_pool._session.closed:
+        await http_pool._session.close()
+    http_pool._session = None
 
 
 # Mock paper data matching PaperMetadata schema from app/schemas.py

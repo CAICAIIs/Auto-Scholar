@@ -15,6 +15,7 @@ from app.schemas import PaperMetadata, DraftOutput, StartRequest, ReviewSection,
 from app.utils.event_queue import StreamingEventQueue
 from app.utils.exporter import ExportFormat, export_to_markdown, export_to_docx
 from app.utils.charts import generate_all_charts
+from app.utils.http_pool import close_session
 from app.workflow import create_workflow
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(name)s %(levelname)s %(message)s")
@@ -45,6 +46,7 @@ async def lifespan(app: FastAPI):
         app.state.graph = graph
         logger.info("LangGraph workflow initialized")
         yield
+    await close_session()
     logger.info("LangGraph workflow shut down")
 
 

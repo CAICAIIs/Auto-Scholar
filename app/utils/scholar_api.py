@@ -9,6 +9,7 @@ from tenacity import retry, wait_exponential, stop_after_attempt, retry_if_excep
 from dotenv import load_dotenv
 
 from app.schemas import PaperMetadata, PaperSource
+from app.utils.http_pool import get_session
 
 load_dotenv()
 
@@ -297,10 +298,9 @@ async def search_semantic_scholar(
     queries: list[str],
     limit_per_query: int = 10,
 ) -> list[PaperMetadata]:
-    timeout = aiohttp.ClientTimeout(total=60)
-    async with aiohttp.ClientSession(timeout=timeout) as session:
-        tasks = [_fetch_semantic_scholar(session, q, limit=limit_per_query, offset=0) for q in queries]
-        results = await asyncio.gather(*tasks, return_exceptions=True)
+    session = await get_session()
+    tasks = [_fetch_semantic_scholar(session, q, limit=limit_per_query, offset=0) for q in queries]
+    results = await asyncio.gather(*tasks, return_exceptions=True)
 
     papers: list[PaperMetadata] = []
     seen_ids: set[str] = set()
@@ -320,10 +320,9 @@ async def search_arxiv(
     queries: list[str],
     limit_per_query: int = 10,
 ) -> list[PaperMetadata]:
-    timeout = aiohttp.ClientTimeout(total=60)
-    async with aiohttp.ClientSession(timeout=timeout) as session:
-        tasks = [_fetch_arxiv(session, q, limit=limit_per_query) for q in queries]
-        results = await asyncio.gather(*tasks, return_exceptions=True)
+    session = await get_session()
+    tasks = [_fetch_arxiv(session, q, limit=limit_per_query) for q in queries]
+    results = await asyncio.gather(*tasks, return_exceptions=True)
 
     papers: list[PaperMetadata] = []
     seen_ids: set[str] = set()
@@ -342,27 +341,26 @@ async def search_pubmed(
     queries: list[str],
     limit_per_query: int = 10,
 ) -> list[PaperMetadata]:
-    timeout = aiohttp.ClientTimeout(total=60)
-    async with aiohttp.ClientSession(timeout=timeout) as session:
-        id_tasks = [_fetch_pubmed_ids(session, q, limit=limit_per_query) for q in queries]
-        id_results = await asyncio.gather(*id_tasks, return_exceptions=True)
-        
-        all_pmids: list[str] = []
-        seen_pmids: set[str] = set()
-        for r in id_results:
-            if isinstance(r, BaseException):
-                logger.error("PubMed ID search failed: %s", r)
-                continue
-            for pmid in r:
-                if pmid not in seen_pmids:
-                    seen_pmids.add(pmid)
-                    all_pmids.append(pmid)
-        
-        if not all_pmids:
-            return []
-        
-        summary_data = await _fetch_pubmed_summaries(session, all_pmids)
-        return _parse_pubmed_papers(summary_data, all_pmids)
+    session = await get_session()
+    id_tasks = [_fetch_pubmed_ids(session, q, limit=limit_per_query) for q in queries]
+    id_results = await asyncio.gather(*id_tasks, return_exceptions=True)
+    
+    all_pmids: list[str] = []
+    seen_pmids: set[str] = set()
+    for r in id_results:
+        if isinstance(r, BaseException):
+            logger.error("PubMed ID search failed: %s", r)
+            continue
+        for pmid in r:
+            if pmid not in seen_pmids:
+                seen_pmids.add(pmid)
+                all_pmids.append(pmid)
+    
+    if not all_pmids:
+        return []
+    
+    summary_data = await _fetch_pubmed_summaries(session, all_pmids)
+    return _parse_pubmed_papers(summary_data, all_pmids)
 
 
 def deduplicate_papers(papers: list[PaperMetadata]) -> list[PaperMetadata]:
