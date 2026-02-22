@@ -68,3 +68,20 @@ SOURCE_SKIP_THRESHOLD = 3
 SOURCE_SKIP_WINDOW_SECONDS = 120
 # Why 120: 2-minute window balances quick recovery detection with
 # avoiding repeated failures. Sources typically recover within minutes.
+
+# =============================================================================
+# Claim Verification Configuration
+# =============================================================================
+
+CLAIM_VERIFICATION_CONCURRENCY = 2
+# Why 2: Same as LLM_CONCURRENCY. Each claim verification is an LLM call.
+# Keeps within rate limits while parallelizing verification.
+
+CLAIM_VERIFICATION_ENABLED = True
+# Feature flag to enable/disable semantic claim verification.
+# Set to False to skip claim-level checks and use only rule-based validation.
+
+MIN_ENTAILMENT_RATIO = 0.8
+# Why 0.8: At least 80% of claim-citation pairs must be "entails".
+# Below this threshold, QA fails and triggers retry.
+# 0.8 balances strictness with tolerance for edge cases.
