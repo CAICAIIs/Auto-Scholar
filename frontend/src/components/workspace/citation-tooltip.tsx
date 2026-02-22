@@ -2,6 +2,7 @@
 
 import { useState } from "react"
 import type { Paper } from "@/types"
+import { FileText } from "lucide-react"
 
 interface CitationTooltipProps {
   citationId: string
@@ -46,16 +47,16 @@ export function CitationTooltip({ citationId, papers, children }: CitationToolti
               View paper →
             </a>
           )}
-          {paper.pdf_url && (
-            <a
-              href={paper.pdf_url}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="mt-1 block text-xs text-green-600 hover:underline dark:text-green-400"
-            >
-              📄 Download PDF →
-            </a>
-          )}
+            {paper.pdf_url && (
+              <a
+                href={paper.pdf_url}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="mt-1 block text-xs text-green-600 hover:underline dark:text-green-400"
+              >
+                <FileText className="h-4 w-4 inline-flex" /> Download PDF →
+              </a>
+            )}
         </span>
       )}
     </span>

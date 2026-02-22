@@ -5,6 +5,7 @@ import { useResearchStore } from "@/store/research"
 import { PaperCard } from "./paper-card"
 import { StageIndicator } from "./stage-indicator"
 import { useTranslations } from "next-intl"
+import { PenSquare, CheckCircle2 } from "lucide-react"
 
 export function ProcessingVisualizer() {
   const t = useTranslations("processing")
@@ -95,7 +96,7 @@ export function ProcessingVisualizer() {
       {processingStage === "drafting" && (
         <div className="flex-shrink-0 border-t border-zinc-800 px-4 py-3">
           <div className="flex items-center gap-2 text-sm text-purple-400">
-            <span className="animate-pulse">✍️</span>
+            <span className="animate-pulse"><PenSquare className="h-4 w-4 inline-flex" /></span>
             <span>{t("draftingMessage")}</span>
           </div>
         </div>
@@ -104,7 +105,7 @@ export function ProcessingVisualizer() {
       {processingStage === "qa" && (
         <div className="flex-shrink-0 border-t border-zinc-800 px-4 py-3">
           <div className="flex items-center gap-2 text-sm text-amber-400">
-            <span className="animate-pulse">✅</span>
+            <span className="animate-pulse"><CheckCircle2 className="h-4 w-4 inline-flex" /></span>
             <span>{t("qaMessage")}</span>
           </div>
         </div>

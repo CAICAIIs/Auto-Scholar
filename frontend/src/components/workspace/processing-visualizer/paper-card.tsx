@@ -3,6 +3,7 @@
 import { cn } from "@/lib/utils"
 import type { Paper } from "@/types"
 import type { PaperProcessingStatus } from "@/store/research"
+import { Circle, CircleDot, Check, X } from "lucide-react"
 
 interface PaperCardProps {
   paper: Paper
@@ -24,11 +25,11 @@ const statusStyles: Record<PaperProcessingStatus, string> = {
   failed: "border-red-500/50 bg-red-500/5",
 }
 
-const statusIcons: Record<PaperProcessingStatus, string> = {
-  pending: "○",
-  processing: "◉",
-  completed: "✓",
-  failed: "✗",
+const statusIcons: Record<PaperProcessingStatus, React.ReactNode> = {
+  pending: <Circle className="h-4 w-4" />,
+  processing: <CircleDot className="h-4 w-4" />,
+  completed: <Check className="h-4 w-4" />,
+  failed: <X className="h-4 w-4" />,
 }
 
 export function PaperCard({ paper, status, message, index }: PaperCardProps) {

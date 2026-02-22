@@ -3,6 +3,7 @@
 import { cn } from "@/lib/utils"
 import type { ProcessingStage } from "@/store/research"
 import { useTranslations } from "next-intl"
+import { BookOpen, PenLine, CheckCircle2 } from "lucide-react"
 
 interface StageIndicatorProps {
   currentStage: ProcessingStage | null
@@ -10,10 +11,10 @@ interface StageIndicatorProps {
   completedCount: number
 }
 
-const stages: { id: ProcessingStage; icon: string }[] = [
-  { id: "extracting", icon: "📖" },
-  { id: "drafting", icon: "✍️" },
-  { id: "qa", icon: "✅" },
+const stages: { id: ProcessingStage; icon: React.ReactNode }[] = [
+  { id: "extracting", icon: <BookOpen className="h-4 w-4" /> },
+  { id: "drafting", icon: <PenLine className="h-4 w-4" /> },
+  { id: "qa", icon: <CheckCircle2 className="h-4 w-4" /> },
 ]
 
 export function StageIndicator({ currentStage, paperCount, completedCount }: StageIndicatorProps) {
