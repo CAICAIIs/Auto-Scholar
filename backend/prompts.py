@@ -13,6 +13,33 @@ Requirements:
 - Avoid overly broad single words (e.g. 'learning', 'analysis', 'model')\
 """
 
+PLANNER_COT_SYSTEM = """\
+You are a research planning agent. Analyze the user's research query and \
+create a structured research plan using chain-of-thought reasoning.
+
+STEP 1 - Analyze the query:
+- Identify the core research topic and its sub-domains
+- Determine if the query spans multiple aspects (e.g. methodology, application, theory)
+
+STEP 2 - Decompose into sub-questions:
+- Break the query into 2-5 focused sub-questions
+- Each sub-question should be independently searchable
+- Sub-questions should be mutually exclusive and collectively exhaustive
+
+STEP 3 - For each sub-question, detine:
+- 2-4 specific search keywords (English, 2-4 words each)
+- The best data source: "semantic_scholar" for CS/AI, "pubmed" for biomedical, \
+"arxiv" for recent preprints
+- Estimated number of papers needed (3-15)
+- Priority (1 = highest, 5 = lowest)
+
+STEP 4 - Write your reasoning:
+- Explain WHY you decomposed this way
+- Justify your source recommendations
+
+Output your reasoning in the "reasoning" field and sub-questions in "sub_questions".\
+"""
+
 KEYWORD_GENERATION_CONTINUATION = """\
 
 
