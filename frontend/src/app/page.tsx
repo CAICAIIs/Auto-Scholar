@@ -6,7 +6,7 @@ import { AgentConsole } from "@/components/console"
 import { Workspace } from "@/components/workspace"
 import { ApprovalModal } from "@/components/approval"
 import { useResearchStore } from "@/store/research"
-import { startResearch, approveResearch, continueResearch } from "@/lib/api"
+import { startResearch, approveResearch, continueResearch, createSSEConnection } from "@/lib/api"
 import type { ConversationMessage } from "@/types"
 
 export default function Home() {
@@ -105,32 +105,44 @@ export default function Home() {
     startProcessingSimulation()
 
     try {
-      const response = await approveResearch(threadId, paperIds)
-
-      response.logs.forEach((log) => addLog("workflow", log))
+      await approveResearch(threadId, paperIds)
 
       const approvedPapers = useResearchStore.getState().candidatePapers.filter(
         (p) => paperIds.includes(p.paper_id)
       )
       setApprovedPapers(approvedPapers)
-      clearProcessingStates()
 
-      if (response.final_draft) {
-        setDraft(response.final_draft)
-        setStatus("completed")
-        addLog("system", "Literature review completed!")
+      if (sseCleanupRef.current) sseCleanupRef.current()
+      sseCleanupRef.current = createSSEConnection(
+        threadId,
+        (node, log) => addLog(node, log),
+        (data) => {
+          clearProcessingStates()
+          if (data.final_draft) {
+            setDraft(data.final_draft)
+            setStatus("completed")
+            addLog("system", "Literature review completed!")
 
-        const assistantMessage: ConversationMessage = {
-          role: "assistant",
-          content: `Generated literature review: "${response.final_draft.title}" with ${response.final_draft.sections.length} sections.`,
-          timestamp: new Date().toISOString(),
-          metadata: { action: "draft_completed" },
-        }
-        addMessage(assistantMessage)
-      } else {
-        setStatus("error")
-        setError(t('draftFailed'))
-      }
+            const assistantMessage: ConversationMessage = {
+              role: "assistant",
+              content: `Generated literature review: "${data.final_draft.title}" with ${data.final_draft.sections.length} sections.`,
+              timestamp: new Date().toISOString(),
+              metadata: { action: "draft_completed" },
+            }
+            addMessage(assistantMessage)
+          } else {
+            setStatus("error")
+            setError(t('draftFailed'))
+          }
+          sseCleanupRef.current = null
+        },
+        (error) => {
+          clearProcessingStates()
+          setError(error)
+          addLog("error", error)
+          sseCleanupRef.current = null
+        },
+      )
     } catch (err) {
       clearProcessingStates()
       const message = getErrorMessage(err)
@@ -155,25 +167,42 @@ export default function Home() {
     addMessage(userMessage)
 
     try {
-      const response = await continueResearch(threadId, message)
+      await continueResearch(threadId, message)
 
-      response.logs.forEach((log: string) => addLog("workflow", log))
+      if (sseCleanupRef.current) sseCleanupRef.current()
+      sseCleanupRef.current = createSSEConnection(
+        threadId,
+        (node, log) => addLog(node, log),
+        (data) => {
+          if (data.final_draft) {
+            setDraft(data.final_draft)
+            setCandidatePapers(data.candidate_papers)
+            setStatus("completed")
+            addLog("system", "Draft updated successfully!")
 
-      if (response.final_draft) {
-        setDraft(response.final_draft)
-        setCandidatePapers(response.candidate_papers)
-        setStatus("completed")
-        addLog("system", "Draft updated successfully!")
-
-        addMessage(response.message)
-      } else {
-        setStatus("error")
-        setError(t('draftFailed'))
-      }
+            const assistantMsg: ConversationMessage = {
+              role: "assistant",
+              content: `Updated draft based on: ${message}`,
+              timestamp: new Date().toISOString(),
+              metadata: { action: "draft_updated" },
+            }
+            addMessage(assistantMsg)
+          } else {
+            setStatus("error")
+            setError(t('draftFailed'))
+          }
+          sseCleanupRef.current = null
+        },
+        (error) => {
+          setError(error)
+          addLog("error", error)
+          sseCleanupRef.current = null
+        },
+      )
     } catch (err) {
-      const message = getErrorMessage(err)
-      setError(message)
-      addLog("error", message)
+      const errMessage = getErrorMessage(err)
+      setError(errMessage)
+      addLog("error", errMessage)
     }
   }, [setStatus, addLog, addMessage, setDraft, setCandidatePapers, setError, getErrorMessage, t])
 

@@ -38,7 +38,7 @@ async function request<T>(endpoint: string, options?: RequestInit): Promise<T> {
     })
     clearTimeout(timeout)
 
-    if (!res.ok) {
+    if (!res.ok && res.status !== 202) {
       const text = await res.text()
       throw new ApiError(res.status, text || `Request failed with status ${res.status}`)
     }
@@ -116,10 +116,15 @@ export async function exportReview(
   return res.blob()
 }
 
+export interface SSECompletedData {
+  final_draft: DraftOutput | null
+  candidate_papers: Paper[]
+}
+
 export function createSSEConnection(
   threadId: string,
   onMessage: (node: string, log: string) => void,
-  onDone: () => void,
+  onCompleted: (data: SSECompletedData) => void,
   onError: (error: string) => void
 ): () => void {
   const eventSource = new EventSource(`${API_BASE}/api/research/stream/${threadId}`)
@@ -128,8 +133,11 @@ export function createSSEConnection(
     try {
       const data = JSON.parse(event.data)
       
-      if (data.event === "done") {
-        onDone()
+      if (data.event === "completed") {
+        onCompleted({
+          final_draft: data.final_draft ?? null,
+          candidate_papers: data.candidate_papers ?? [],
+        })
         eventSource.close()
         return
       }

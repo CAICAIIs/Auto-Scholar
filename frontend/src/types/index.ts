@@ -89,9 +89,7 @@ export interface ApproveRequest {
 
 export interface ApproveResponse {
   thread_id: string
-  final_draft: DraftOutput | null
   approved_count: number
-  logs: string[]
 }
 
 export interface ContinueRequest {
@@ -101,10 +99,6 @@ export interface ContinueRequest {
 
 export interface ContinueResponse {
   thread_id: string
-  message: ConversationMessage
-  final_draft: DraftOutput | null
-  candidate_papers: Paper[]
-  logs: string[]
 }
 
 export interface StatusResponse {
