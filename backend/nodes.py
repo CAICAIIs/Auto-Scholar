@@ -27,6 +27,7 @@ from backend.prompts import (
     KEYWORD_GENERATION_CONTINUATION,
     KEYWORD_GENERATION_SYSTEM,
     OUTLINE_GENERATION_SYSTEM,
+    PLANNER_COT_SYSTEM,
     SECTION_GENERATION_SYSTEM,
     STRUCTURED_EXTRACTION_SYSTEM,
     STRUCTURED_EXTRACTION_USER,
@@ -39,6 +40,7 @@ from backend.schemas import (
     MethodComparisonEntry,
     PaperMetadata,
     PaperSource,
+    ResearchPlan,
     ReviewSection,
     StructuredContribution,
 )
@@ -83,14 +85,53 @@ def _build_conversation_context(
     return "\n".join(lines)
 
 
+COT_QUERY_MIN_LENGTH = 10
+
+
 async def planner_agent(state: AgentState) -> dict[str, Any]:
     user_query = state["user_query"]
     is_continuation = state.get("is_continuation", False)
     messages = state.get("messages", [])
+    use_cot = len(user_query.strip()) >= COT_QUERY_MIN_LENGTH and not is_continuation
 
     logger.info(
-        "planner_agent: decomposing query: %s (continuation: %s)", user_query, is_continuation
+        "planner_agent: decomposing query: %s (continuation: %s, cot: %s)",
+        user_query,
+        is_continuation,
+        use_cot,
     )
+
+    if use_cot:
+        system_content = PLANNER_COT_SYSTEM
+        start_time = time.perf_counter()
+        plan = await structured_completion(
+            messages=[
+                {"role": "system", "content": system_content},
+                {"role": "user", "content": user_query},
+            ],
+            response_model=ResearchPlan,
+        )
+        elapsed = time.perf_counter() - start_time
+        logger.info("planner_agent: CoT planning completed in %.2fs", elapsed)
+
+        all_keywords: list[str] = []
+        for sq in plan.sub_questions:
+            all_keywords.extend(sq.keywords)
+        keywords = list(dict.fromkeys(all_keywords))[:MAX_KEYWORDS]
+
+        logs = [
+            f"Research plan: {len(plan.sub_questions)} sub-questions identified",
+            f"Reasoning: {plan.reasoning[:200]}...",
+            f"Generated {len(keywords)} search keywords: {keywords}",
+        ]
+
+        return {
+            "search_keywords": keywords,
+            "research_plan": plan,
+            "logs": logs,
+            "current_agent": "planner",
+            "agent_handoffs": ["→planner"],
+        }
 
     system_content = KEYWORD_GENERATION_SYSTEM
 
@@ -116,6 +157,7 @@ async def planner_agent(state: AgentState) -> dict[str, Any]:
     logger.info("planner_agent: %s", log_msg)
     return {
         "search_keywords": keywords,
+        "research_plan": None,
         "logs": [log_msg],
         "current_agent": "planner",
         "agent_handoffs": ["→planner"],
