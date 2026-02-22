@@ -6,6 +6,8 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
+pytestmark = [pytest.mark.slow, pytest.mark.integration]
+
 
 @pytest_asyncio.fixture
 async def client():

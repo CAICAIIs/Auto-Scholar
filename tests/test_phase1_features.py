@@ -9,6 +9,8 @@ from app.schemas import DraftOutput, ReviewSection, PaperMetadata
 
 load_dotenv()
 
+pytestmark = [pytest.mark.slow, pytest.mark.integration]
+
 
 @pytest_asyncio.fixture
 async def client():
