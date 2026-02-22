@@ -209,7 +209,6 @@ export const useResearchStore = create<ResearchState>((set, get) => ({
     
     const avgTimePerPaper = 3000
     const draftTime = 5000
-    const qaTime = 2000
     
     paperIds.forEach((paperId, index) => {
       const startDelay = index * avgTimePerPaper * 0.3

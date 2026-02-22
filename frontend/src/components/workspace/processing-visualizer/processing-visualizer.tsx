@@ -20,6 +20,10 @@ export function ProcessingVisualizer() {
   const processingStartTime = useResearchStore((s) => s.processingStartTime)
 
   useEffect(() => {
+    if (!processingStartTime) {
+      return
+    }
+
     const updateElapsed = () => {
       setElapsedSeconds(Math.floor((Date.now() - processingStartTime) / 1000))
     }

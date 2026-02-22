@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState } from "react"
 import { useTranslations } from 'next-intl'
 import { Button } from "@/components/ui/button"
 import { getCharts, type ChartsResponse } from "@/lib/api/client"
