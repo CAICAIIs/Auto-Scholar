@@ -298,9 +298,22 @@ class TestSessionsAPI:
             approve_resp = await mocked_client.post(
                 "/api/research/approve",
                 json={"thread_id": thread_id, "paper_ids": paper_ids},
-                timeout=180.0,
             )
-            assert approve_resp.status_code == 200
+            assert approve_resp.status_code == 202
+
+            import json as _json
+
+            async with mocked_client.stream(
+                "GET",
+                f"/api/research/stream/{thread_id}",
+                timeout=300.0,
+            ) as stream_resp:
+                async for line in stream_resp.aiter_lines():
+                    if not line.startswith("data:"):
+                        continue
+                    payload = _json.loads(line[len("data:") :].strip())
+                    if payload.get("event") == "completed":
+                        break
 
             session_resp = await mocked_client.get(f"/api/research/sessions/{thread_id}")
             assert session_resp.status_code == 200
@@ -363,11 +376,21 @@ class TestErrorHandling:
 
         if len(candidate_papers) > 0:
             paper_ids = [p["paper_id"] for p in candidate_papers[:2]]
-            await mocked_client.post(
+            resp = await mocked_client.post(
                 "/api/research/approve",
                 json={"thread_id": thread_id, "paper_ids": paper_ids},
-                timeout=180.0,
             )
+            assert resp.status_code == 202
+
+            async with mocked_client.stream(
+                "GET",
+                f"/api/research/stream/{thread_id}",
+                timeout=300.0,
+            ) as stream_resp:
+                async for line in stream_resp.aiter_lines():
+                    if line.startswith("data:"):
+                        if '"event":"completed"' in line or '"event": "completed"' in line:
+                            break
 
             resp = await mocked_client.post(
                 "/api/research/approve",
@@ -431,13 +454,29 @@ class TestFullWorkflow:
         approve_resp = await mocked_client.post(
             "/api/research/approve",
             json={"thread_id": thread_id, "paper_ids": paper_ids},
-            timeout=180.0,
         )
-        assert approve_resp.status_code == 200
-        result = approve_resp.json()
-        assert result["final_draft"] is not None
+        assert approve_resp.status_code == 202
 
-        draft = result["final_draft"]
+        import json as _json
+
+        completed_data = None
+        async with mocked_client.stream(
+            "GET",
+            f"/api/research/stream/{thread_id}",
+            timeout=300.0,
+        ) as stream_resp:
+            async for line in stream_resp.aiter_lines():
+                if not line.startswith("data:"):
+                    continue
+                payload = _json.loads(line[len("data:") :].strip())
+                if payload.get("event") == "completed":
+                    completed_data = payload
+                    break
+
+        assert completed_data is not None
+        draft = completed_data["final_draft"]
+        assert draft is not None
+
         approved_papers = [p for p in candidate_papers if p["paper_id"] in paper_ids]
 
         export_resp = await mocked_client.post(

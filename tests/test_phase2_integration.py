@@ -224,11 +224,8 @@ class TestMultiSourceWorkflow:
         approve_resp = await mocked_client.post(
             "/api/research/approve",
             json={"thread_id": thread_id, "paper_ids": paper_ids},
-            timeout=180.0,
         )
-        assert approve_resp.status_code == 200
-        result = approve_resp.json()
-        assert result["final_draft"] is not None
+        assert approve_resp.status_code == 202
 
     @pytest.mark.asyncio
     async def test_full_workflow_with_mixed_sources(self, mocked_client: httpx.AsyncClient):
@@ -253,11 +250,9 @@ class TestMultiSourceWorkflow:
         approve_resp = await mocked_client.post(
             "/api/research/approve",
             json={"thread_id": thread_id, "paper_ids": paper_ids},
-            timeout=180.0,
         )
-        assert approve_resp.status_code == 200
+        assert approve_resp.status_code == 202
         result = approve_resp.json()
-        assert result["final_draft"] is not None
         assert result["approved_count"] == len(paper_ids)
 
 

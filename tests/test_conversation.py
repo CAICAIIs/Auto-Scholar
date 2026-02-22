@@ -139,11 +139,23 @@ class TestMultiTurnWorkflow:
         approve_resp = await mocked_client.post(
             "/api/research/approve",
             json={"thread_id": thread_id, "paper_ids": paper_ids},
-            timeout=180.0,
         )
-        assert approve_resp.status_code == 200
-        approve_data = approve_resp.json()
-        assert approve_data["final_draft"] is not None
+        assert approve_resp.status_code == 202
+
+        import json as _json
+
+        async with mocked_client.stream(
+            "GET",
+            f"/api/research/stream/{thread_id}",
+            timeout=300.0,
+        ) as stream_resp:
+            async for line in stream_resp.aiter_lines():
+                if not line.startswith("data:"):
+                    continue
+                payload = _json.loads(line[len("data:") :].strip())
+                if payload.get("event") == "completed":
+                    assert payload["final_draft"] is not None
+                    break
 
         session_resp = await mocked_client.get(f"/api/research/sessions/{thread_id}")
         assert session_resp.status_code == 200
@@ -157,14 +169,21 @@ class TestMultiTurnWorkflow:
                 "thread_id": thread_id,
                 "message": "Please expand the methodology comparison section",
             },
-            timeout=180.0,
         )
-        assert continue_resp.status_code == 200
-        continue_data = continue_resp.json()
+        assert continue_resp.status_code == 202
 
-        assert "message" in continue_data
-        assert continue_data["message"]["role"] == "assistant"
-        assert continue_data["final_draft"] is not None
+        async with mocked_client.stream(
+            "GET",
+            f"/api/research/stream/{thread_id}",
+            timeout=300.0,
+        ) as stream_resp:
+            async for line in stream_resp.aiter_lines():
+                if not line.startswith("data:"):
+                    continue
+                payload = _json.loads(line[len("data:") :].strip())
+                if payload.get("event") == "completed":
+                    assert payload["final_draft"] is not None
+                    break
 
         final_session_resp = await mocked_client.get(f"/api/research/sessions/{thread_id}")
         assert final_session_resp.status_code == 200

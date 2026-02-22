@@ -1,3 +1,4 @@
+import json
 import uuid
 
 import httpx
@@ -83,15 +84,35 @@ async def test_full_workflow(client: httpx.AsyncClient):
     resp = await client.post(
         "/api/research/approve",
         json={"thread_id": thread_id, "paper_ids": paper_ids},
-        timeout=180.0,
     )
-    assert resp.status_code == 200, f"Approve failed: {resp.text}"
+    assert resp.status_code == 202, f"Approve failed: {resp.text}"
     result = resp.json()
-
     assert result["approved_count"] == len(paper_ids)
-    assert result["final_draft"] is not None, "Should have produced a final draft"
 
-    draft = result["final_draft"]
+    # Step 4: Stream to get the final draft
+    async with client.stream(
+        "GET",
+        f"/api/research/stream/{thread_id}",
+        timeout=300.0,
+    ) as response:
+        assert response.status_code == 200
+        completed_data = None
+        sse_logs: list[str] = []
+        async for line in response.aiter_lines():
+            if not line.startswith("data:"):
+                continue
+            payload = json.loads(line[len("data:") :].strip())
+            if payload.get("event") == "completed":
+                completed_data = payload
+                break
+            if payload.get("event") == "error":
+                raise AssertionError(f"Stream error: {payload.get('detail')}")
+            if payload.get("log"):
+                sse_logs.append(payload["log"])
+
+    assert completed_data is not None, "Should have received completed event"
+    draft = completed_data["final_draft"]
+    assert draft is not None, "Should have produced a final draft"
     assert draft["title"], "Draft should have a title"
     assert len(draft["sections"]) > 0, "Draft should have sections"
 
@@ -101,13 +122,12 @@ async def test_full_workflow(client: httpx.AsyncClient):
     for section in draft["sections"]:
         print(f"  - {section['heading']} (cites: {section['cited_paper_ids']})")
 
-    all_logs = result["logs"]
-    print("\n=== ALL LOGS ===")
-    for log in all_logs:
+    print("\n=== SSE LOGS ===")
+    for log in sse_logs:
         print(f"  {log}")
 
-    assert len(all_logs) >= 3, (
-        f"Should have at least 3 log entries (extract, draft, QA), got {len(all_logs)}"
+    assert len(sse_logs) >= 3, (
+        f"Should have at least 3 log entries (extract, draft, QA), got {len(sse_logs)}"
     )
 
 
@@ -140,24 +160,16 @@ async def test_stream_endpoint(client: httpx.AsyncClient):
 
     paper_ids = [p["paper_id"] for p in candidate_papers[:2]]
 
-    await client.post(
+    resp = await client.post(
         "/api/research/approve",
         json={"thread_id": thread_id, "paper_ids": paper_ids},
-        timeout=180.0,
     )
-
-    resp = await client.post(
-        "/api/research/start",
-        json={"query": "reinforcement learning"},
-        timeout=120.0,
-    )
-    assert resp.status_code == 200
-    stream_thread_id = resp.json()["thread_id"]
+    assert resp.status_code == 202
 
     async with client.stream(
         "GET",
-        f"/api/research/stream/{stream_thread_id}",
-        timeout=180.0,
+        f"/api/research/stream/{thread_id}",
+        timeout=300.0,
     ) as response:
         assert response.status_code == 200
         assert response.headers.get("content-type") == "text/event-stream; charset=utf-8"
@@ -166,7 +178,7 @@ async def test_stream_endpoint(client: httpx.AsyncClient):
         async for line in response.aiter_lines():
             if line.startswith("data:"):
                 events.append(line)
-                if '"event": "done"' in line or '"event":"done"' in line:
+                if '"event": "completed"' in line or '"event":"completed"' in line:
                     break
 
         assert len(events) > 0, "Should have received SSE events"
