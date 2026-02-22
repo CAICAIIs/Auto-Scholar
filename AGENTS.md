@@ -12,6 +12,7 @@ python -m py_compile backend/schemas.py      # Compile check single file
 ruff check backend/                          # Lint all
 ruff check backend/main.py                   # Lint single file
 ruff format backend/ --check                 # Check formatting
+ruff format backend/                         # Auto-format
 
 # Backend tests (pytest)
 uv run pytest tests/ -v                             # Run all tests
@@ -19,6 +20,9 @@ uv run pytest tests/test_integration.py -v          # Run single file
 uv run pytest tests/test_integration.py::test_full_workflow -v  # Run single test
 uv run pytest tests/test_exporter.py::test_export_markdown -v   # Another example
 uv run pytest -x                                    # Stop on first failure
+uv run pytest -m                          # Skip slow tests
+uv run pytest -m "not integration"                  # Skip integration tests
+uv run pytest --cov=backend tests/                  # With coverage
 
 # Frontend
 cd frontend && bun install                   # Install deps
@@ -28,7 +32,7 @@ cd frontend && bun run lint                  # ESLint
 
 # Frontend tests (vitest + playwright)
 cd frontend && bun test                      # Run unit tests (vitest)
-cd frontend && bun test src/__tests__/store.test.ts      # Single test file
+cd frontend && bun test src/__tests__/store.test. Single test file
 cd frontend && bun run test:e2e              # Run E2E tests (playwright)
 
 # DO NOT run these from agents (long-running):
@@ -81,6 +85,12 @@ auto-scholar/
 | Functions/vars | snake_case | `search_papers` |
 | Constants | UPPER_SNAKE | `SEMANTIC_SCHOLAR_URL` |
 | Private | `_` prefix | `_fetch_page` |
+
+### Ruff Configuration (ruff.toml)
+- Line length: 100
+- Enabled rule sets: `E` (pycodestyle errors), `F` (pyflakes), `W` (pycodestyle warnings), `I` (isort), `N` (pep8-naming), `UP` (pyupgrade)
+- `E501` ignored (formatter handles line length)
+- Indent style: spaces
 
 ### Async & Error Handling
 - All network I/O MUST be async (`aiohttp`, not `requests`)
@@ -145,12 +155,14 @@ auto-scholar/
 
 ### Backend (pytest)
 - `asyncio_mode = "auto"` in pyproject.toml (no `@pytest.mark.asyncio` needed)
+- Markers: `@pytest.mark.slow`, `@pytest.mark.integration` — skip with `-m "not slow"` or `-m "not integration"`
 - Use fixtures from `conftest.py` for mocking external APIs:
   ```python
   async def test_feature(mock_external_apis_success):
       # External APIs are mocked
   ```
 - Test DB: `test_checkpoints_{uuid}.db` (auto-cleaned)
+- Coverage: `uv run pytest --cov=backend tests/` — branch coverage enabled, excludes `__init__.py`
 
 ### Frontend (vitest)
 - jsdom environment, globals enabled
@@ -182,5 +194,15 @@ cd frontend && bun run lint                  # ESLint - warnings OK, errors NOT 
 3. Only then proceed with `git add` and `git commit`
 
 **CI will reject commits that fail these checks. Save time by running locally first.**
+
+## Pre-Commit Hooks
+
+Pre-commit is configured (`.pre-commit-config.yaml`) with:
+- `ruff` — lint with `--fix` (auto-fixes safe issues)
+- `ruff-format` — auto-format
+- `mypy` — type checking with `--ignore-missing-imports`
+
+Install hooks: `pre-commit install`. They run automatically on `git commit`.
+If a hook modifies files, re-stage and commit again.
 
 When the Write or Edit tool has content size limits, always comply silently. Never suggest bypassing these limits via alternative tools. Never ask the user whether to switch approaches. Complete all chunked operations without commentary.
