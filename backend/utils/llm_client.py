@@ -6,7 +6,13 @@ from typing import Any, TypeVar
 
 import httpx
 from dotenv import load_dotenv
-from openai import AsyncOpenAI
+from openai import (
+    APIConnectionError,
+    APITimeoutError,
+    AsyncOpenAI,
+    InternalServerError,
+    RateLimitError,
+)
 from openai.types.chat import ChatCompletionMessageParam
 from pydantic import BaseModel, ValidationError
 from tenacity import (
@@ -14,7 +20,7 @@ from tenacity import (
     retry,
     retry_if_exception_type,
     stop_after_attempt,
-    wait_exponential,
+    wait_random_exponential,
 )
 
 from backend.constants import LLM_DEFAULT_MAX_TOKENS
@@ -104,9 +110,18 @@ def _build_schema_prompt(response_model: type[BaseModel]) -> str:
 
 
 @retry(
-    wait=wait_exponential(multiplier=1, min=2, max=15),
-    stop=stop_after_attempt(3),
-    retry=retry_if_exception_type((httpx.TimeoutException, httpx.ConnectError)),
+    wait=wait_random_exponential(min=1, max=30),
+    stop=stop_after_attempt(4),
+    retry=retry_if_exception_type(
+        (
+            httpx.TimeoutException,
+            httpx.ConnectError,
+            RateLimitError,
+            APIConnectionError,
+            APITimeoutError,
+            InternalServerError,
+        )
+    ),
     before_sleep=before_sleep_log(logger, logging.WARNING),
 )
 async def _call_llm(

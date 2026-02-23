@@ -4,6 +4,28 @@ Each constant has a rationale explaining why this specific value was chosen.
 This enables informed discussion during code reviews and interviews.
 """
 
+import os
+
+# =============================================================================
+# Environment Variable Helpers
+# =============================================================================
+
+
+def _parse_int_env(name: str, default: int, min_val: int, max_val: int) -> int:
+    """Parse an integer environment variable with bounds clamping.
+
+    Returns default if env var is unset or unparseable. Clamps to [min_val, max_val].
+    """
+    raw = os.getenv(name)
+    if raw is None:
+        return default
+    try:
+        value = int(raw)
+    except ValueError:
+        return default
+    return max(min_val, min(max_val, value))
+
+
 # =============================================================================
 # Search Configuration
 # =============================================================================
@@ -22,9 +44,10 @@ PAPERS_PER_QUERY = 5
 # Concurrency Limits
 # =============================================================================
 
-LLM_CONCURRENCY = 2
+LLM_CONCURRENCY = _parse_int_env("LLM_CONCURRENCY", default=2, min_val=1, max_val=20)
 # Why 2: OpenAI free/low-tier limits ~3 RPM. Concurrency=2 avoids rate limits
 # while being 2x faster than sequential. Increase for higher-tier API keys.
+# Configurable via LLM_CONCURRENCY env var (clamped to 1-20).
 
 LLM_DEFAULT_MAX_TOKENS = 8192
 # Why 8192: DeepSeek defaults to 4096 when max_tokens is not set, which causes
@@ -88,9 +111,12 @@ SOURCE_SKIP_WINDOW_SECONDS = 120
 # Claim Verification Configuration
 # =============================================================================
 
-CLAIM_VERIFICATION_CONCURRENCY = 2
+CLAIM_VERIFICATION_CONCURRENCY = _parse_int_env(
+    "CLAIM_VERIFICATION_CONCURRENCY", default=2, min_val=1, max_val=20
+)
 # Why 2: Same as LLM_CONCURRENCY. Each claim verification is an LLM call.
 # Keeps within rate limits while parallelizing verification.
+# Configurable via CLAIM_VERIFICATION_CONCURRENCY env var (clamped to 1-20).
 
 CLAIM_VERIFICATION_ENABLED = True
 # Feature flag to enable/disable semantic claim verification.
