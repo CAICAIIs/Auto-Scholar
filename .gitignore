@@ -48,6 +48,7 @@ checkpoints.db-shm
 checkpoints.db-wal
 
 # Project specific - DO NOT UPLOAD
+docs/OPTIMIZATION_PLAN.md
 
 # Node.js (frontend)
 node_modules/
