@@ -21,6 +21,7 @@ from backend.prompts import (
     CONTRIBUTION_EXTRACTION_SYSTEM,
     CONTRIBUTION_EXTRACTION_USER,
     DRAFT_GENERATION_SYSTEM,
+    DRAFT_REFLECTION_RETRY_ADDENDUM,
     DRAFT_RETRY_ADDENDUM,
     DRAFT_REVISION_ADDENDUM,
     DRAFT_USER_PROMPT,
@@ -28,6 +29,8 @@ from backend.prompts import (
     KEYWORD_GENERATION_SYSTEM,
     OUTLINE_GENERATION_SYSTEM,
     PLANNER_COT_SYSTEM,
+    REFLECTION_SYSTEM,
+    REFLECTION_USER,
     SECTION_GENERATION_SYSTEM,
     STRUCTURED_EXTRACTION_SYSTEM,
     STRUCTURED_EXTRACTION_USER,
@@ -40,6 +43,7 @@ from backend.schemas import (
     MethodComparisonEntry,
     PaperMetadata,
     PaperSource,
+    Reflection,
     ResearchPlan,
     ReviewSection,
     StructuredContribution,
@@ -177,7 +181,14 @@ async def retriever_agent(state: AgentState) -> dict[str, Any]:
         }
 
     research_plan = state.get("research_plan")
-    sources = state.get("search_sources", [PaperSource.SEMANTIC_SCHOLAR])
+    sources = state.get(
+        "search_sources",
+        [
+            PaperSource.SEMANTIC_SCHOLAR,
+            PaperSource.ARXIV,
+            PaperSource.PUBMED,
+        ],
+    )
 
     if research_plan and research_plan.sub_questions:
         logger.info(
@@ -185,7 +196,9 @@ async def retriever_agent(state: AgentState) -> dict[str, Any]:
             len(research_plan.sub_questions),
         )
         start_time = time.perf_counter()
-        papers = await search_by_plan(research_plan, default_limit=PAPERS_PER_QUERY)
+        papers = await search_by_plan(
+            research_plan, default_limit=PAPERS_PER_QUERY, allowed_sources=sources
+        )
         elapsed = time.perf_counter() - start_time
         logger.info("retriever_agent: plan-aware search completed in %.2fs", elapsed)
 
@@ -515,13 +528,23 @@ async def writer_agent(state: AgentState) -> dict[str, Any]:
             )
 
         if is_retry:
-            top_errors = qa_errors[:3]
-            error_list = "\n".join(f"- {e}" for e in top_errors)
-            system_prompt += DRAFT_RETRY_ADDENDUM.format(
-                error_count=len(qa_errors),
-                error_list=error_list,
-                num_papers=num_papers,
-            )
+            reflection = state.get("reflection")
+            if reflection and reflection.entries:
+                instructions = []
+                for entry in reflection.entries:
+                    instructions.append(f"- [{entry.error_category.value}] {entry.fix_strategy}")
+                system_prompt += DRAFT_REFLECTION_RETRY_ADDENDUM.format(
+                    reflection_instructions="\n".join(instructions),
+                    num_papers=num_papers,
+                )
+            else:
+                top_errors = qa_errors[:3]
+                error_list = "\n".join(f"- {e}" for e in top_errors)
+                system_prompt += DRAFT_RETRY_ADDENDUM.format(
+                    error_count=len(qa_errors),
+                    error_list=error_list,
+                    num_papers=num_papers,
+                )
 
         draft = await structured_completion(
             messages=[
@@ -724,4 +747,67 @@ async def critic_agent(state: AgentState) -> dict[str, Any]:
         "logs": [log_msg],
         "current_agent": "critic",
         "agent_handoffs": ["writer→critic"],
+    }
+
+
+async def reflection_agent(state: AgentState) -> dict[str, Any]:
+    qa_errors = state.get("qa_errors", [])
+    retry_count = state.get("retry_count", 0)
+
+    if not qa_errors:
+        logger.info("reflection_agent: no errors to reflect on, skipping")
+        return {
+            "reflection": None,
+            "logs": ["Reflection skipped: no QA errors"],
+            "current_agent": "reflection",
+            "agent_handoffs": ["critic→reflection"],
+        }
+
+    error_list = "\n".join(f"- {e}" for e in qa_errors)
+    num_papers = len(state.get("approved_papers", []))
+
+    logger.info(
+        "reflection_agent: analyzing %d QA errors (retry %d)",
+        len(qa_errors),
+        retry_count,
+    )
+
+    reflection = await structured_completion(
+        messages=[
+            {"role": "system", "content": REFLECTION_SYSTEM},
+            {
+                "role": "user",
+                "content": REFLECTION_USER.format(
+                    num_papers=num_papers,
+                    retry_count=retry_count,
+                    error_list=error_list,
+                ),
+            },
+        ],
+        response_model=Reflection,
+    )
+
+    writer_fixable = sum(1 for e in reflection.entries if e.fixable_by_writer)
+    retriever_needed = sum(1 for e in reflection.entries if not e.fixable_by_writer)
+
+    logs = [
+        f"Reflection: {len(reflection.entries)} errors analyzed "
+        f"({writer_fixable} writer-fixable, {retriever_needed} need retriever)",
+        f"Reflection: retry_target={reflection.retry_target}, "
+        f"should_retry={reflection.should_retry}",
+        f"Reflection: {reflection.summary[:150]}",
+    ]
+
+    logger.info(
+        "reflection_agent: %s (target=%s, should_retry=%s)",
+        reflection.summary[:100],
+        reflection.retry_target,
+        reflection.should_retry,
+    )
+
+    return {
+        "reflection": reflection,
+        "logs": logs,
+        "current_agent": "reflection",
+        "agent_handoffs": ["critic→reflection"],
     }

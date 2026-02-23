@@ -14,6 +14,7 @@ from backend.nodes import (
     critic_agent,
     extractor_agent,
     planner_agent,
+    reflection_agent,
     retriever_agent,
     writer_agent,
 )
@@ -44,6 +45,7 @@ _timed_retriever_agent = _timed_node(retriever_agent)
 _timed_extractor_agent = _timed_node(extractor_agent)
 _timed_writer_agent = _timed_node(writer_agent)
 _timed_critic_agent = _timed_node(critic_agent)
+_timed_reflection_agent = _timed_node(reflection_agent)
 
 
 def _entry_router(state: AgentState) -> Literal["planner_agent", "writer_agent"]:
@@ -53,17 +55,28 @@ def _entry_router(state: AgentState) -> Literal["planner_agent", "writer_agent"]
     return "planner_agent"
 
 
-def _qa_router(state: AgentState) -> Literal["writer_agent", "__end__"]:
+def _qa_router(state: AgentState) -> Literal["reflection_agent", "__end__"]:
     qa_errors = state.get("qa_errors", [])
-    retry_count = state.get("retry_count", 0)
-
     if not qa_errors:
         return "__end__"
+    return "reflection_agent"
 
-    if retry_count < MAX_RETRY_COUNT:
-        return "writer_agent"
 
-    return "__end__"
+def _reflection_router(
+    state: AgentState,
+) -> Literal["writer_agent", "retriever_agent", "__end__"]:
+    reflection = state.get("reflection")
+    retry_count = state.get("retry_count", 0)
+
+    if reflection is None or not reflection.should_retry:
+        return "__end__"
+    if retry_count >= MAX_RETRY_COUNT:
+        return "__end__"
+
+    target = reflection.retry_target
+    if target in ("writer_agent", "retriever_agent"):
+        return target
+    return "writer_agent"
 
 
 def _build_graph() -> StateGraph:
@@ -73,6 +86,7 @@ def _build_graph() -> StateGraph:
     g.add_node("extractor_agent", _timed_extractor_agent)  # type: ignore[call-overload]
     g.add_node("writer_agent", _timed_writer_agent)  # type: ignore[call-overload]
     g.add_node("critic_agent", _timed_critic_agent)  # type: ignore[call-overload]
+    g.add_node("reflection_agent", _timed_reflection_agent)  # type: ignore[call-overload]
 
     g.add_conditional_edges(START, _entry_router)
     g.add_edge("planner_agent", "retriever_agent")
@@ -80,6 +94,7 @@ def _build_graph() -> StateGraph:
     g.add_edge("extractor_agent", "writer_agent")
     g.add_edge("writer_agent", "critic_agent")
     g.add_conditional_edges("critic_agent", _qa_router)
+    g.add_conditional_edges("reflection_agent", _reflection_router)
     return g
 
 

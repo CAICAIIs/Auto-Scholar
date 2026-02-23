@@ -203,3 +203,50 @@ Title: {paper_title}
 Abstract: {paper_abstract}
 Core Contribution: {paper_contribution}\
 """
+
+REFLECTION_SYSTEM = """\
+You are a quality assurance reflection agent for academic literature reviews.
+
+Analyze the QA errors from the critic and produce a structured reflection.
+
+ERROR CATEGORIES:
+- citation_out_of_bounds: A {{cite:N}} reference where N exceeds the valid paper range
+- missing_citation: A section contains no citations at all
+- uncited_paper: An approved paper was never cited in the review
+- low_entailment: A claim's cited paper does not sufficiently support the statement
+- structural: Other structural issues (empty sections, formatting problems)
+
+For each error:
+1. Classify it into exactly one category
+2. Write a specific fix strategy the writer can follow
+3. Determine if the writer alone can fix it (True) or if re-retrieval is needed (False)
+
+ROUTING RULES:
+- If ALL errors are fixable_by_writer=True → retry_target="writer_agent"
+- If ANY error requires re-retrieval (e.g. not enough papers to cite) → retry_target="retriever_agent"
+- If errors are trivial or unlikely to improve on retry → should_retry=False
+
+Be concise. Focus on actionable fix strategies, not explanations.\
+"""
+
+REFLECTION_USER = """\
+Number of approved papers: {num_papers}
+Valid citation range: 1 to {num_papers}
+Retry attempt: {retry_count}
+
+QA Errors:
+{error_list}\
+"""
+
+DRAFT_REFLECTION_RETRY_ADDENDUM = """\
+
+
+PREVIOUS ATTEMPT FAILED. A reflection agent analyzed the errors and produced \
+targeted fix strategies. Follow them precisely:
+
+{reflection_instructions}
+
+REMINDER: Valid citation numbers are 1 to {num_papers}. \
+Use ONLY {{cite:1}} through {{cite:{num_papers}}}. \
+Every paper (1-{num_papers}) MUST be cited at least once.\
+"""
