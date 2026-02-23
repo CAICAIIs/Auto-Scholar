@@ -298,12 +298,28 @@ async def extractor_agent(state: AgentState) -> dict[str, Any]:
         logger.warning("extractor_agent: %s", log_msg)
         return {
             "approved_papers": [],
+            "selected_papers": [],
             "logs": [log_msg],
             "current_agent": "extractor",
             "agent_handoffs": ["retriever→extractor"],
         }
 
-    logger.info("extractor_agent: extracting contributions from %d papers", len(approved))
+    research_plan = state.get("research_plan")
+    if research_plan and research_plan.sub_questions:
+        approved_ordered = _prioritize_by_sub_questions(approved, research_plan)
+    else:
+        approved_ordered = approved
+
+    selected = approved_ordered[:CONTEXT_MAX_PAPERS]
+
+    if len(approved) > CONTEXT_MAX_PAPERS:
+        logger.info(
+            "extractor_agent: selected %d/%d approved papers for extraction",
+            len(selected),
+            len(approved),
+        )
+
+    logger.info("extractor_agent: extracting contributions from %d papers", len(selected))
 
     semaphore = asyncio.Semaphore(LLM_CONCURRENCY)
 
@@ -311,12 +327,12 @@ async def extractor_agent(state: AgentState) -> dict[str, Any]:
         async with semaphore:
             return await _extract_contribution(paper)
 
-    tasks = [extract_with_limit(p) for p in approved]
+    tasks = [extract_with_limit(p) for p in selected]
     results = await asyncio.gather(*tasks, return_exceptions=True)
 
     extracted: list[PaperMetadata] = []
     failed_count = 0
-    for r, paper in zip(results, approved):
+    for r, paper in zip(results, selected):
         if isinstance(r, BaseException):
             logger.error(
                 "ContributionExtraction failed for paper '%s' (ID: %s): %s",
@@ -329,8 +345,10 @@ async def extractor_agent(state: AgentState) -> dict[str, Any]:
         extracted.append(r)
 
     log_msg = f"Extracted contributions from {len(extracted)} papers"
+    if len(approved) > len(selected):
+        log_msg += f" (selected from {len(approved)} approved)"
     if failed_count:
-        log_msg += f" ({failed_count} failed - check logs for details)"
+        log_msg += f" ({failed_count} failed)"
     logger.info("extractor_agent: %s", log_msg)
 
     logs = [log_msg]
@@ -354,7 +372,8 @@ async def extractor_agent(state: AgentState) -> dict[str, Any]:
             logger.warning("extractor_agent: full-text enrichment failed: %s", e)
 
     return {
-        "approved_papers": extracted,
+        "approved_papers": approved,
+        "selected_papers": extracted,
         "logs": logs,
         "current_agent": "extractor",
         "agent_handoffs": ["retriever→extractor"],

@@ -21,6 +21,7 @@ class AgentState(TypedDict):
     search_keywords: list[str]
     candidate_papers: list[PaperMetadata]
     approved_papers: list[PaperMetadata]
+    selected_papers: list[PaperMetadata]
     final_draft: DraftOutput | None
     qa_errors: list[str]
     retry_count: int
