@@ -140,8 +140,23 @@ After approval, the system will:
 |--------|-------|-------------------|
 | SSE Network Reduction | 92% | Benchmark test with 263 tokens → 21 flushes |
 | Citation Accuracy | 97.3% | Manual validation of 37 citations across 3 topics |
-| Typical Workflow Time | ~45s | 3 papers end-to-end |
+| Typical Workflow Time | ~45s | 3 papers end-to-end (with default concurrency) |
 | Max QA Retries | 3 | Configurable in workflow.py (`MAX_RETRY_COUNT`) |
+
+### Performance Tuning
+
+The following environment variables allow performance tuning for users with higher-tier API keys:
+
+| Variable | Default | Recommended Values | Description |
+|----------|----------|-------------------|-------------|
+| `LLM_CONCURRENCY` | 2 | 2-4 (free tier), 4-8 (paid tier) | Concurrent LLM calls during extraction |
+| `CLAIM_VERIFICATION_CONCURRENCY` | 2 | 2-4 (free tier), 4-8 (paid tier) | Concurrent claim verification calls |
+
+**Expected improvements with increased concurrency:**
+- `LLM_CONCURRENCY=4`: ~50% reduction in extraction time
+- `CLAIM_VERIFICATION_CONCURRENCY=4`: ~50% reduction in verification time
+
+**Note:** Increasing concurrency may trigger rate limits on lower-tier API plans. Start with default values and increase gradually.
 
 ### Benchmark Details
 
