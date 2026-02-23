@@ -7,6 +7,7 @@ This directory contains project documentation beyond the root README files.
 - [Architecture](ARCHITECTURE.md) - System architecture, workflow, data model, and runtime behavior
 - [Development Guide](DEVELOPMENT.md) - Local setup, quality checks, and common development workflows
 - [API Reference](API.md) - Backend REST API endpoints and request/response contracts
+- [Optimization Plan](OPTIMIZATION_PLAN.md) - Performance optimization plan with implementation details
 
 ## Language
 
