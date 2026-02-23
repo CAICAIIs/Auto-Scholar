@@ -124,3 +124,27 @@ PASSIVE_PATTERN_ZH = r"被\w+"
 MIN_HEDGING_RATIO = 0.05
 MAX_HEDGING_RATIO = 0.20
 MIN_CITATION_DENSITY = 2.0
+
+# =============================================================================
+# Context Engineering (P3)
+# =============================================================================
+
+CONTEXT_TOKEN_BUDGET = 12000
+# Why 12000: Measured ~177 tokens/paper (8-dimension structured info).
+# 12000 tokens ≈ 67 papers. Leaves headroom for system prompt + output tokens
+# within 128K context window. Covers 3-source × 5-keyword scenarios comfortably.
+
+CONTEXT_TOKENS_PER_PAPER_ESTIMATE = 180
+# Why 180: Average across papers with full structured_contribution (8 fields).
+# Papers with only abstract fallback are shorter (~100 tokens).
+# Used as fallback when per-paper estimation is unavailable.
+
+CONTEXT_MAX_PAPERS = 60
+# Why 60: Hard ceiling before any token estimation. At ~180 tokens/paper,
+# 60 papers ≈ 10,800 tokens (within 12K budget). Prevents pathological cases
+# where token estimation underestimates and context explodes.
+
+CONTEXT_OVERFLOW_WARNING_THRESHOLD = 30
+# Why 30: Log a warning when paper count exceeds this. Normal single-source
+# queries yield 20-30 papers. Exceeding 30 signals multi-source or multi-turn
+# accumulation that may need attention.
