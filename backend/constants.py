@@ -144,21 +144,22 @@ MIN_CITATION_DENSITY = 2.0
 # Context Engineering (P3)
 # =============================================================================
 
-CONTEXT_TOKEN_BUDGET = 6000
-# Why 6000: With PAPERS_PER_QUERY=5, typical approved set is 10-20 papers.
-# At ~177 tokens/paper, 20 papers ≈ 3,540 tokens. 6000 provides comfortable
-# headroom while preventing runaway context growth in multi-turn scenarios.
+CONTEXT_TOKEN_BUDGET = 40000
+# Why 40000: Safety net only. In normal use, ALL approved papers are included.
+# 100 papers × ~180 tokens = ~18,000 tokens (well within 128K context window).
+# This budget only triggers in extreme edge cases (200+ papers with full
+# structured contributions). Academic reviews should cite ALL approved papers.
 
 CONTEXT_TOKENS_PER_PAPER_ESTIMATE = 180
 # Why 180: Average across papers with full structured_contribution (8 fields).
 # Papers with only abstract fallback are shorter (~100 tokens).
 # Used as fallback when per-paper estimation is unavailable.
 
-CONTEXT_MAX_PAPERS = 25
-# Why 25: Hard ceiling matching the realistic upper bound of approved papers.
-# With PAPERS_PER_QUERY=5, candidates top out at ~25 after dedup.
-# At ~180 tokens/paper, 25 papers ≈ 4,500 tokens (within 6K budget).
+CONTEXT_MAX_PAPERS = 200
+# Why 200: Safety net only, not a functional limit. ALL approved papers should
+# be extracted and cited. This prevents truly pathological cases (e.g., a bug
+# that approves thousands of papers). Normal workflows never hit this.
 
-CONTEXT_OVERFLOW_WARNING_THRESHOLD = 20
-# Why 20: With reduced PAPERS_PER_QUERY, normal queries yield 10-15 papers.
-# Exceeding 20 signals multi-turn accumulation that may need attention.
+CONTEXT_OVERFLOW_WARNING_THRESHOLD = 100
+# Why 100: Normal workflows produce 15-75 approved papers. Exceeding 100
+# signals something unusual that deserves attention (but is not blocked).

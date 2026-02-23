@@ -309,16 +309,15 @@ async def extractor_agent(state: AgentState) -> dict[str, Any]:
     else:
         approved_ordered = approved
 
-    selected = approved_ordered[:CONTEXT_MAX_PAPERS]
-
-    if len(approved) > CONTEXT_MAX_PAPERS:
-        logger.info(
-            "extractor_agent: selected %d/%d approved papers for extraction",
-            len(selected),
-            len(approved),
+    if len(approved_ordered) > CONTEXT_MAX_PAPERS:
+        logger.warning(
+            "extractor_agent: %d approved papers exceeds safety limit %d, truncating",
+            len(approved_ordered),
+            CONTEXT_MAX_PAPERS,
         )
+        approved_ordered = approved_ordered[:CONTEXT_MAX_PAPERS]
 
-    logger.info("extractor_agent: extracting contributions from %d papers", len(selected))
+    logger.info("extractor_agent: extracting contributions from %d papers", len(approved_ordered))
 
     semaphore = asyncio.Semaphore(LLM_CONCURRENCY)
 
@@ -326,12 +325,12 @@ async def extractor_agent(state: AgentState) -> dict[str, Any]:
         async with semaphore:
             return await _extract_contribution(paper)
 
-    tasks = [extract_with_limit(p) for p in selected]
+    tasks = [extract_with_limit(p) for p in approved_ordered]
     results = await asyncio.gather(*tasks, return_exceptions=True)
 
     extracted: list[PaperMetadata] = []
     failed_count = 0
-    for r, paper in zip(results, selected):
+    for r, paper in zip(results, approved_ordered):
         if isinstance(r, BaseException):
             logger.error(
                 "ContributionExtraction failed for paper '%s' (ID: %s): %s",
@@ -344,8 +343,6 @@ async def extractor_agent(state: AgentState) -> dict[str, Any]:
         extracted.append(r)
 
     log_msg = f"Extracted contributions from {len(extracted)} papers"
-    if len(approved) > len(selected):
-        log_msg += f" (selected from {len(approved)} approved)"
     if failed_count:
         log_msg += f" ({failed_count} failed)"
     logger.info("extractor_agent: %s", log_msg)
