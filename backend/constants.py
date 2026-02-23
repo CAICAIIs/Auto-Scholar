@@ -26,6 +26,11 @@ LLM_CONCURRENCY = 2
 # Why 2: OpenAI free/low-tier limits ~3 RPM. Concurrency=2 avoids rate limits
 # while being 2x faster than sequential. Increase for higher-tier API keys.
 
+LLM_DEFAULT_MAX_TOKENS = 8192
+# Why 8192: DeepSeek defaults to 4096 when max_tokens is not set, which causes
+# JSON truncation on longer outputs. 8192 is DeepSeek's maximum supported value.
+# For OpenAI models this is also a safe default (well within their limits).
+
 FULLTEXT_CONCURRENCY = 3
 # Why 3: Unpaywall has no official rate limit docs. Testing showed 5 concurrent
 # requests occasionally trigger 429. 3 is safe and acceptable for <20 papers.

@@ -17,6 +17,7 @@ from tenacity import (
     wait_exponential,
 )
 
+from backend.constants import LLM_DEFAULT_MAX_TOKENS
 from backend.evaluation.cost_tracker import record_llm_usage
 
 load_dotenv()
@@ -27,7 +28,6 @@ T = TypeVar("T", bound=BaseModel)
 
 _client: AsyncOpenAI | None = None
 
-# LLM request timeout: 60s for connection, 120s total (allows for slow responses)
 LLM_TIMEOUT = httpx.Timeout(connect=60.0, read=120.0, write=60.0, pool=60.0)
 
 
@@ -116,7 +116,8 @@ async def _call_llm(
     max_tokens: int | None,
 ) -> str:
     model = get_model()
-    logger.info("LLM request starting (model=%s, max_tokens=%s)", model, max_tokens)
+    effective_max_tokens = max_tokens or LLM_DEFAULT_MAX_TOKENS
+    logger.info("LLM request starting (model=%s, max_tokens=%s)", model, effective_max_tokens)
     start_time = time.perf_counter()
     try:
         completion = await client.chat.completions.create(  # type: ignore[call-overload]
@@ -124,7 +125,7 @@ async def _call_llm(
             messages=augmented_messages,
             response_format={"type": "json_object"},
             temperature=temperature,
-            max_tokens=max_tokens,
+            max_tokens=effective_max_tokens,
         )
         elapsed = time.perf_counter() - start_time
         logger.info("LLM request completed in %.2fs", elapsed)
