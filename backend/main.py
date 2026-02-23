@@ -117,6 +117,7 @@ async def start_research(req: StartRequest):
                     "agent_handoffs": [],
                     "draft_outline": None,
                     "research_plan": None,
+                    "reflection": None,
                 },
                 config=config,
             ),

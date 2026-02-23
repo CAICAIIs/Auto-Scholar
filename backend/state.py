@@ -10,6 +10,7 @@ from backend.schemas import (
     DraftOutput,
     PaperMetadata,
     PaperSource,
+    Reflection,
     ResearchPlan,
 )
 
@@ -33,3 +34,4 @@ class AgentState(TypedDict):
     draft_outline: DraftOutline | None
     claim_verification: ClaimVerificationSummary | None
     research_plan: ResearchPlan | None
+    reflection: Reflection | None

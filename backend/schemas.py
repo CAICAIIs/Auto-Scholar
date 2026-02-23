@@ -259,10 +259,45 @@ class ResearchPlan(BaseModel):
     )
 
 
+class ErrorCategory(StrEnum):
+    """Categories of QA errors for structured reflection."""
+
+    CITATION_OUT_OF_BOUNDS = "citation_out_of_bounds"
+    MISSING_CITATION = "missing_citation"
+    UNCITED_PAPER = "uncited_paper"
+    LOW_ENTAILMENT = "low_entailment"
+    STRUCTURAL = "structural"
+
+
+class ReflectionEntry(BaseModel):
+    """A single error analysis with targeted fix strategy."""
+
+    error_category: ErrorCategory
+    error_detail: str = Field(description="Specific error description")
+    fix_strategy: str = Field(description="Concrete fix instruction for the writer")
+    fixable_by_writer: bool = Field(description="True if writer can fix; False if retriever needed")
+
+
+class Reflection(BaseModel):
+    """Structured reflection on QA errors with routing decision."""
+
+    entries: list[ReflectionEntry] = Field(description="Analyzed errors with fix strategies")
+    should_retry: bool = Field(description="Whether a retry is warranted")
+    retry_target: str = Field(
+        default="writer_agent",
+        description="Target node: 'writer_agent' or 'retriever_agent'",
+    )
+    summary: str = Field(description="Brief reflection summary for logging")
+
+
 class StartRequest(BaseModel):
     query: str
     language: str = "en"
-    sources: list[PaperSource] = [PaperSource.SEMANTIC_SCHOLAR]
+    sources: list[PaperSource] = [
+        PaperSource.SEMANTIC_SCHOLAR,
+        PaperSource.ARXIV,
+        PaperSource.PUBMED,
+    ]
 
 
 class StartResponse(BaseModel):
