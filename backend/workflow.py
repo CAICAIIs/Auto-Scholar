@@ -73,9 +73,8 @@ def _reflection_router(
     if retry_count >= MAX_RETRY_COUNT:
         return "__end__"
 
-    target = reflection.retry_target
-    if target in ("writer_agent", "retriever_agent"):
-        return target
+    if reflection.retry_target == "retriever_agent":
+        return "retriever_agent"
     return "writer_agent"
 
 
