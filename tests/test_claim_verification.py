@@ -5,7 +5,6 @@ from unittest.mock import AsyncMock, patch
 import pytest
 
 from backend.schemas import (
-    BatchClaimList,
     Claim,
     ClaimVerificationResult,
     ClaimVerificationSummary,
@@ -14,7 +13,6 @@ from backend.schemas import (
     PaperMetadata,
     PaperSource,
     ReviewSection,
-    SectionClaim,
 )
 from backend.utils.claim_verifier import (
     extract_all_claims,
