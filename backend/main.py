@@ -181,8 +181,10 @@ async def stream_research(thread_id: str):
             candidates = values.get("candidate_papers", [])
 
             if final_draft:
-                approved_list = [p for p in candidates if p.is_approved]
-                normalize_draft_citations(final_draft, approved_list)
+                selected = values.get("selected_papers")
+                if not selected:
+                    selected = [p for p in candidates if p.is_approved]
+                normalize_draft_citations(final_draft, selected)
 
             completed_payload = {
                 "event": "completed",
@@ -475,7 +477,9 @@ async def evaluate_session(thread_id: str):
         raise HTTPException(status_code=400, detail="Session has no completed draft to evaluate")
 
     candidates = values.get("candidate_papers", [])
-    approved = [p for p in candidates if p.is_approved]
+    selected = values.get("selected_papers")
+    if not selected:
+        selected = [p for p in candidates if p.is_approved]
     logs = values.get("logs", [])
     language = values.get("output_language", "en")
     claim_verification = values.get("claim_verification")
@@ -483,7 +487,7 @@ async def evaluate_session(thread_id: str):
     return run_evaluation(
         thread_id=thread_id,
         draft=draft,
-        approved_papers=approved,
+        approved_papers=selected,
         logs=logs,
         language=language,
         claim_verification=claim_verification,
