@@ -57,6 +57,17 @@ LLM_MODEL=gpt-4o
 
 # Optional - increases Semantic Scholar rate limits
 SEMANTIC_SCHOLAR_API_KEY=your-key
+
+# Optional - LLM concurrency for parallel operations
+# Default: 2 (safe for free/low-tier API keys)
+# Recommended: 2-4 for free tier, 4-8 for paid tier
+# Higher values improve performance but may trigger rate limits
+LLM_CONCURRENCY=2
+
+# Optional - claim verification concurrency
+# Default: 2 (safe for free/low-tier API keys)
+# Recommended: 2-4 for free tier, 4-8 for paid tier
+CLAIM_VERIFICATION_CONCURRENCY=2
 ```
 
 ### 3. Start Services
