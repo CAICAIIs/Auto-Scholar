@@ -488,12 +488,12 @@ async def search_by_plan(
     default_limit: int = 10,
     allowed_sources: list[PaperSource] | None = None,
 ) -> list[PaperMetadata]:
-    """Search papers per sub-question with differentiated sources and limits.
+    """Search papers per sub-question, ensuring all allowed sources are queried.
 
-    Each sub-question uses its preferred_source and estimated_papers count.
-    All sub-question searches run in parallel; results are cross-deduplicated.
-    If allowed_sources is provided, only those sources are used; sub-questions
-    preferring a disallowed source fall back to the first allowed source.
+    1. Each sub-question searches its preferred_source (if allowed).
+    2. Sources in allowed_sources that no sub-question covers get supplemental
+       searches using all collected keywords, so every user-selected source
+       contributes results.
     """
     if not plan.sub_questions:
         return []
@@ -506,6 +506,11 @@ async def search_by_plan(
 
     tasks: list[Any] = []
     task_labels: list[str] = []
+    used_sources: set[PaperSource] = set()
+
+    all_keywords: list[str] = []
+    for sq in plan.sub_questions:
+        all_keywords.extend(sq.keywords)
 
     for sq in plan.sub_questions:
         source = sq.preferred_source
@@ -526,21 +531,41 @@ async def search_by_plan(
             logger.warning("search_by_plan: unknown source %s, skipping", source)
             continue
 
+        used_sources.add(source)
         tasks.append(search_fn(sq.keywords, limit_per_query=limit))
         task_labels.append(f"{sq.question[:40]}→{source.value}")
+
+    if allowed_sources and all_keywords:
+        unique_keywords = list(dict.fromkeys(all_keywords))
+        for source in allowed_sources:
+            if source in used_sources:
+                continue
+            if should_skip(source.value):
+                logger.warning(
+                    "search_by_plan: skipping supplemental %s due to recent failures",
+                    source.value,
+                )
+                continue
+            search_fn = source_dispatch.get(source)
+            if search_fn is None:
+                continue
+            used_sources.add(source)
+            tasks.append(search_fn(unique_keywords, limit_per_query=default_limit))
+            task_labels.append(f"supplemental→{source.value}")
 
     if not tasks:
         return []
 
     logger.info(
-        "search_by_plan: launching %d sub-question searches: %s",
+        "search_by_plan: launching %d searches (sources: %s): %s",
         len(tasks),
+        [s.value for s in used_sources],
         task_labels,
     )
     start_time = time.perf_counter()
     results = await asyncio.gather(*tasks, return_exceptions=True)
     elapsed = time.perf_counter() - start_time
-    logger.info("search_by_plan: all sub-question searches completed in %.2fs", elapsed)
+    logger.info("search_by_plan: all searches completed in %.2fs", elapsed)
 
     all_papers: list[PaperMetadata] = []
     for i, r in enumerate(results):
