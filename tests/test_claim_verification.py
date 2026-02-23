@@ -5,6 +5,7 @@ from unittest.mock import AsyncMock, patch
 import pytest
 
 from backend.schemas import (
+    BatchClaimList,
     Claim,
     ClaimVerificationResult,
     ClaimVerificationSummary,
@@ -13,8 +14,10 @@ from backend.schemas import (
     PaperMetadata,
     PaperSource,
     ReviewSection,
+    SectionClaim,
 )
 from backend.utils.claim_verifier import (
+    extract_all_claims,
     extract_claims_from_section,
     summarize_verifications,
     verify_draft_citations,
@@ -323,3 +326,49 @@ class TestCriticAgentIntegration:
 
             assert result["qa_errors"] == []
             assert result.get("claim_verification") is None
+
+
+class TestBatchClaimExtraction:
+    async def test_extract_all_claims_batch_failure_fallback_to_per_section(self):
+        from backend.schemas import DraftOutput, ReviewSection
+
+        draft = DraftOutput(
+            title="Literature Review",
+            sections=[
+                ReviewSection(
+                    heading="Introduction",
+                    content="The transformer architecture {cite:1} revolutionized NLP.",
+                ),
+                ReviewSection(
+                    heading="Methods",
+                    content="Self-attention {cite:2} enables parallel computation.",
+                ),
+            ],
+        )
+
+        async def mock_batch_extraction(*args, **kwargs):
+            raise Exception("Batch extraction failed")
+
+        async def mock_per_section(*args, **kwargs):
+            return AsyncMock(claims=["The transformer architecture revolutionized NLP."])
+
+        with patch(
+            "backend.utils.claim_verifier._extract_claims_batch",
+            side_effect=mock_batch_extraction,
+        ):
+            with patch(
+                "backend.utils.claim_verifier.extract_claims_from_section",
+                new=AsyncMock(
+                    return_value=[
+                        Claim(
+                            claim_id="s0_c0",
+                            text="The transformer architecture revolutionized NLP.",
+                            section_index=0,
+                            citation_indices=[1],
+                        )
+                    ]
+                ),
+            ):
+                results = await extract_all_claims(draft)
+
+                assert len(results) == 2
