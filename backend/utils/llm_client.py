@@ -5,6 +5,7 @@ import time
 from typing import Any, TypeVar
 
 import httpx
+import json_repair
 from dotenv import load_dotenv
 from openai import (
     APIConnectionError,
@@ -188,18 +189,27 @@ async def structured_completion(
     try:
         parsed_json = json.loads(raw_content)
     except json.JSONDecodeError as e:
-        truncated_hint = ""
-        if "Unterminated" in str(e) or raw_content.rstrip()[-1] not in "]}":
-            truncated_hint = (
-                " (output likely truncated - try reducing paper count or increasing max_tokens)"
+        logger.warning("json.loads failed (%s), attempting json_repair...", e)
+        try:
+            parsed_json = json_repair.loads(raw_content)
+            if not isinstance(parsed_json, dict):
+                raise ValueError(
+                    f"json_repair produced {type(parsed_json).__name__}, expected dict"
+                )
+            logger.info("json_repair succeeded, recovered valid JSON")
+        except Exception:
+            truncated_hint = ""
+            if "Unterminated" in str(e) or raw_content.rstrip()[-1] not in "]}":
+                truncated_hint = (
+                    " (output likely truncated - try reducing paper count or increasing max_tokens)"
+                )
+            logger.error(
+                "LLM returned invalid JSON: %s%s\nRaw (last 500 chars): ...%s",
+                e,
+                truncated_hint,
+                raw_content[-500:],
             )
-        logger.error(
-            "LLM returned invalid JSON: %s%s\nRaw (last 500 chars): ...%s",
-            e,
-            truncated_hint,
-            raw_content[-500:],
-        )
-        raise ValueError(f"LLM 返回无效 JSON{truncated_hint}: {e}") from e
+            raise ValueError(f"LLM 返回无效 JSON{truncated_hint}: {e}") from e
 
     schema_keys = {"properties", "type", "required", "$schema", "$defs"}
     actual_keys = set(parsed_json.keys()) - schema_keys

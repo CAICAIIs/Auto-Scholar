@@ -154,7 +154,7 @@ class TestExportAPI:
         assert "## Conclusion" in content
         assert "## References" in content
         assert "Deep Learning: A Comprehensive Survey" in content
-        assert "Author A, Author B, Author C et al." in content
+        assert "Author A, Author B, Author C, & Author D" in content
         assert "(2023)" in content
 
     @pytest.mark.asyncio

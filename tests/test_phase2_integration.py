@@ -179,8 +179,10 @@ class TestMultiSourceAPI:
         data = resp.json()
         assert "candidate_papers" in data
 
-        for paper in data["candidate_papers"]:
-            assert paper["source"] == "semantic_scholar"
+        # Default sources include all three: semantic_scholar, arxiv, pubmed
+        sources_found = {p["source"] for p in data["candidate_papers"]}
+        for source in sources_found:
+            assert source in ["semantic_scholar", "arxiv", "pubmed"]
 
     @pytest.mark.asyncio
     async def test_logs_show_sources(self, mocked_client: httpx.AsyncClient):
