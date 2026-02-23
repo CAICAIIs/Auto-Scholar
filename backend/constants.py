@@ -118,6 +118,11 @@ CLAIM_VERIFICATION_CONCURRENCY = _parse_int_env(
 # Keeps within rate limits while parallelizing verification.
 # Configurable via CLAIM_VERIFICATION_CONCURRENCY env var (clamped to 1-20).
 
+CLAIM_BATCH_SIZE = 3
+# Why 3: Groups sections for batch claim extraction (1 LLM call per batch).
+# 3 sections per batch balances prompt size vs call reduction.
+# 5 sections → 2 LLM calls instead of 5. Fallback to per-section on failure.
+
 CLAIM_VERIFICATION_ENABLED = True
 # Feature flag to enable/disable semantic claim verification.
 # Set to False to skip claim-level checks and use only rule-based validation.

@@ -1,16 +1,21 @@
 import asyncio
+import json
 import logging
 import re
 
 from pydantic import BaseModel
 
+from backend.constants import CLAIM_BATCH_SIZE
 from backend.prompts import (
+    CLAIM_BATCH_EXTRACTION_SYSTEM,
+    CLAIM_BATCH_EXTRACTION_USER,
     CLAIM_EXTRACTION_SYSTEM,
     CLAIM_EXTRACTION_USER,
     CLAIM_VERIFICATION_SYSTEM,
     CLAIM_VERIFICATION_USER,
 )
 from backend.schemas import (
+    BatchClaimList,
     Claim,
     ClaimVerificationResult,
     ClaimVerificationSummary,
@@ -75,6 +80,61 @@ async def extract_claims_from_section(
     return claims
 
 
+async def _extract_claims_batch(
+    section_groups: list[list[int]],
+    sections: list[str],
+) -> list[Claim]:
+    if not section_groups:
+        return []
+
+    sections_data = []
+    for section_group in section_groups:
+        group_sections = [{"section_index": idx, "text": sections[idx]} for idx in section_group]
+        sections_data.extend(group_sections)
+
+    sections_json = json.dumps(sections_data)
+
+    result = await structured_completion(
+        messages=[
+            {"role": "system", "content": CLAIM_BATCH_EXTRACTION_SYSTEM},
+            {
+                "role": "user",
+                "content": CLAIM_BATCH_EXTRACTION_USER.format(sections_json=sections_json),
+            },
+        ],
+        response_model=BatchClaimList,
+        temperature=0.1,
+    )
+
+    all_claims: list[Claim] = []
+    for section_claim in result.sections_claims:
+        section_index = section_claim.section_index
+        for i, claim_text in enumerate(section_claim.claims):
+            citation_indices = [int(m) for m in CITE_PATTERN.findall(claim_text)]
+            if citation_indices:
+                all_claims.append(
+                    Claim(
+                        claim_id=f"s{section_index}_c{i}",
+                        text=claim_text,
+                        section_index=section_index,
+                        citation_indices=citation_indices,
+                    )
+                )
+
+    return all_claims
+
+
+async def _safe_extract_claims_batch(
+    section_groups: list[list[int]],
+    sections: list[str],
+) -> list[Claim]:
+    try:
+        return await _extract_claims_batch(section_groups, sections)
+    except Exception as e:
+        logger.warning("Batch claim extraction failed: %s", e)
+        return []
+
+
 async def _safe_extract_claims(
     section_index: int,
     section_title: str,
@@ -88,15 +148,55 @@ async def _safe_extract_claims(
 
 
 async def extract_all_claims(draft: DraftOutput) -> list[Claim]:
-    tasks = [
-        _safe_extract_claims(i, section.heading, section.content)
-        for i, section in enumerate(draft.sections)
-    ]
-    results = await asyncio.gather(*tasks)
+    num_sections = len(draft.sections)
+
+    if num_sections <= 1:
+        tasks = [
+            _safe_extract_claims(i, section.heading, section.content)
+            for i, section in enumerate(draft.sections)
+        ]
+        results = await asyncio.gather(*tasks)
+
+        all_claims: list[Claim] = []
+        for claims_list in results:
+            all_claims.extend(claims_list)
+
+        return all_claims
+
+    section_indices_with_citations: list[int] = []
+    for i, section in enumerate(draft.sections):
+        if CITE_PATTERN.search(section.content):
+            section_indices_with_citations.append(i)
+
+    if not section_indices_with_citations:
+        return []
 
     all_claims: list[Claim] = []
-    for claims_list in results:
-        all_claims.extend(claims_list)
+
+    batches: list[list[int]] = []
+    for i in range(0, len(section_indices_with_citations), CLAIM_BATCH_SIZE):
+        batch = section_indices_with_citations[i : i + CLAIM_BATCH_SIZE]
+        if batch:
+            batches.append(batch)
+
+    for batch in batches:
+        batch_sections = []
+        for idx in batch:
+            batch_sections.append(draft.sections[idx])
+
+        batch_result = await _safe_extract_claims_batch(
+            [batch], [s.content for s in batch_sections]
+        )
+
+        if batch_result:
+            all_claims.extend(batch_result)
+        else:
+            for section_idx in batch:
+                section = draft.sections[section_idx]
+                fallback_result = await _safe_extract_claims(
+                    section_idx, section.heading, section.content
+                )
+                all_claims.extend(fallback_result)
 
     return all_claims
 

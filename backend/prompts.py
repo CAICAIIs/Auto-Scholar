@@ -183,6 +183,23 @@ Text:
 {section_content}\
 """
 
+CLAIM_BATCH_EXTRACTION_SYSTEM = """\
+Extract atomic claims from multiple sections. Each claim should be:
+- A single factual statement that can be independently verified
+- Contains at least one citation reference {{cite:N}}
+- Self-contained (understandable without surrounding context)
+
+Split compound sentences into separate claims when they make distinct assertions.
+Preserve the exact citation markers {{cite:N}} from the original text.
+For each section, output claims that reference citations in that section.
+Output claims in the same language as the input text.
+"""
+
+
+CLAIM_BATCH_EXTRACTION_USER = """\
+{sections_json}
+"""
+
 CLAIM_VERIFICATION_SYSTEM = """\
 Determine if the cited paper's content supports the given claim.
 

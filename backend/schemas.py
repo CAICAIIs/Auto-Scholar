@@ -172,6 +172,19 @@ class EntailmentLabel(StrEnum):
     CONTRADICTS = "contradicts"  # Citation contradicts the claim
 
 
+class SectionClaim(BaseModel):
+    """Claims extracted from a single section in batch extraction."""
+
+    section_index: int
+    claims: list[str]
+
+
+class BatchClaimList(BaseModel):
+    """Claims extracted from multiple sections in batch."""
+
+    sections_claims: list[SectionClaim]
+
+
 class Claim(BaseModel):
     """An atomic claim extracted from the review text."""
 
