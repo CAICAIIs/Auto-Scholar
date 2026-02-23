@@ -1,7 +1,5 @@
 from unittest.mock import AsyncMock, patch
 
-import pytest
-
 from backend.schemas import PaperMetadata, PaperSource, ResearchPlan, SubQuestion
 from backend.utils.scholar_api import search_by_plan
 
@@ -289,3 +287,192 @@ class TestRetrieverAgentPlanBranching:
         result = await retriever_agent(state)
         assert result["candidate_papers"] == []
         assert "No search keywords" in result["logs"][0]
+
+
+class TestSearchByPlanEdgeCases:
+    async def test_all_sub_questions_skipped_returns_empty(self):
+        sqs = [
+            SubQuestion(
+                question="Q1",
+                keywords=["kw1", "kw2"],
+                preferred_source=PaperSource.ARXIV,
+                estimated_papers=5,
+            ),
+            SubQuestion(
+                question="Q2",
+                keywords=["kw3", "kw4"],
+                preferred_source=PaperSource.PUBMED,
+                estimated_papers=5,
+            ),
+        ]
+        plan = _make_plan(sqs)
+
+        with patch("backend.utils.scholar_api.should_skip", return_value=True):
+            result = await search_by_plan(plan)
+            assert result == []
+
+    async def test_mixed_skip_and_success(self):
+        sqs = [
+            SubQuestion(
+                question="Skipped source",
+                keywords=["kw1", "kw2"],
+                preferred_source=PaperSource.ARXIV,
+                estimated_papers=5,
+            ),
+            SubQuestion(
+                question="Working source",
+                keywords=["kw3", "kw4"],
+                preferred_source=PaperSource.SEMANTIC_SCHOLAR,
+                estimated_papers=5,
+            ),
+        ]
+        plan = _make_plan(sqs)
+        mock_papers = [_make_paper("ss:1", PaperSource.SEMANTIC_SCHOLAR)]
+
+        def selective_skip(source_name: str) -> bool:
+            return source_name == PaperSource.ARXIV.value
+
+        with (
+            patch("backend.utils.scholar_api.should_skip", side_effect=selective_skip),
+            patch(
+                "backend.utils.scholar_api.search_semantic_scholar",
+                new=AsyncMock(return_value=mock_papers),
+            ) as mock_ss,
+            patch(
+                "backend.utils.scholar_api.search_arxiv",
+                new=AsyncMock(return_value=[]),
+            ) as mock_arxiv,
+        ):
+            result = await search_by_plan(plan)
+            mock_arxiv.assert_not_called()
+            mock_ss.assert_called_once()
+            assert len(result) == 1
+            assert result[0].paper_id == "ss:1"
+
+    async def test_all_searches_fail_returns_empty(self):
+        sqs = [
+            SubQuestion(
+                question="Q1",
+                keywords=["kw1", "kw2"],
+                preferred_source=PaperSource.SEMANTIC_SCHOLAR,
+                estimated_papers=5,
+            ),
+            SubQuestion(
+                question="Q2",
+                keywords=["kw3", "kw4"],
+                preferred_source=PaperSource.ARXIV,
+                estimated_papers=5,
+            ),
+        ]
+        plan = _make_plan(sqs)
+
+        with (
+            patch(
+                "backend.utils.scholar_api.search_semantic_scholar",
+                new=AsyncMock(side_effect=Exception("SS down")),
+            ),
+            patch(
+                "backend.utils.scholar_api.search_arxiv",
+                new=AsyncMock(side_effect=Exception("arXiv down")),
+            ),
+        ):
+            result = await search_by_plan(plan)
+            assert result == []
+
+    async def test_same_source_multiple_sub_questions(self):
+        sqs = [
+            SubQuestion(
+                question="Transformers",
+                keywords=["transformer", "attention"],
+                preferred_source=PaperSource.SEMANTIC_SCHOLAR,
+                estimated_papers=5,
+            ),
+            SubQuestion(
+                question="BERT variants",
+                keywords=["BERT", "pre-training"],
+                preferred_source=PaperSource.SEMANTIC_SCHOLAR,
+                estimated_papers=3,
+            ),
+        ]
+        plan = _make_plan(sqs)
+
+        paper1 = _make_paper("ss:1", PaperSource.SEMANTIC_SCHOLAR)
+        paper2 = _make_paper("ss:2", PaperSource.SEMANTIC_SCHOLAR)
+
+        call_count = 0
+
+        async def mock_search(queries, limit_per_query=10):
+            nonlocal call_count
+            call_count += 1
+            if call_count == 1:
+                return [paper1]
+            return [paper2]
+
+        with patch(
+            "backend.utils.scholar_api.search_semantic_scholar",
+            new=mock_search,
+        ):
+            result = await search_by_plan(plan)
+            assert call_count == 2
+            assert len(result) == 2
+
+    async def test_retriever_plan_path_log_contains_sources(self):
+        from backend.nodes import retriever_agent
+
+        plan = _make_plan(
+            [
+                SubQuestion(
+                    question="Q1",
+                    keywords=["kw1", "kw2"],
+                    preferred_source=PaperSource.ARXIV,
+                    estimated_papers=5,
+                ),
+                SubQuestion(
+                    question="Q2",
+                    keywords=["kw3", "kw4"],
+                    preferred_source=PaperSource.PUBMED,
+                    estimated_papers=3,
+                ),
+            ]
+        )
+        mock_papers = [
+            _make_paper("arxiv:1", PaperSource.ARXIV),
+            _make_paper("pubmed:1", PaperSource.PUBMED),
+        ]
+
+        state = {
+            "search_keywords": ["kw1", "kw3"],
+            "search_sources": [PaperSource.SEMANTIC_SCHOLAR],
+            "research_plan": plan,
+        }
+
+        with patch(
+            "backend.nodes.search_by_plan",
+            new=AsyncMock(return_value=mock_papers),
+        ):
+            result = await retriever_agent(state)
+            log = result["logs"][0]
+            assert "2 sub-questions" in log
+            assert "arxiv" in log
+            assert "pubmed" in log
+
+    async def test_retriever_fallback_log_contains_source_names(self):
+        from backend.nodes import retriever_agent
+
+        mock_papers = [_make_paper("ss:1", PaperSource.SEMANTIC_SCHOLAR)]
+
+        state = {
+            "search_keywords": ["kw1"],
+            "search_sources": [PaperSource.SEMANTIC_SCHOLAR, PaperSource.ARXIV],
+            "research_plan": None,
+        }
+
+        with patch(
+            "backend.nodes.search_papers_multi_source",
+            new=AsyncMock(return_value=mock_papers),
+        ):
+            result = await retriever_agent(state)
+            log = result["logs"][0]
+            assert "semantic_scholar" in log
+            assert "arxiv" in log
+            assert "queries" in log
