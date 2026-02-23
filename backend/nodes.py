@@ -325,12 +325,35 @@ async def extractor_agent(state: AgentState) -> dict[str, Any]:
         async with semaphore:
             return await _extract_contribution(paper)
 
-    tasks = [extract_with_limit(p) for p in approved_ordered]
-    results = await asyncio.gather(*tasks, return_exceptions=True)
+    async def _safe_enrich(papers: list[PaperMetadata]) -> list[PaperMetadata] | None:
+        try:
+            return await enrich_papers_with_fulltext(papers, concurrency=FULLTEXT_CONCURRENCY)
+        except Exception as e:
+            logger.warning("extractor_agent: full-text enrichment failed: %s", e)
+            return None
+
+    extraction_tasks = [extract_with_limit(p) for p in approved_ordered]
+
+    papers_needing_pdf = [p for p in approved_ordered if not p.pdf_url]
+    if papers_needing_pdf:
+        logger.info(
+            "extractor_agent: enriching %d papers with full-text URLs (parallel with extraction)",
+            len(papers_needing_pdf),
+        )
+        extraction_results, enrichment_result = await asyncio.gather(
+            asyncio.gather(*extraction_tasks, return_exceptions=True),
+            _safe_enrich(approved_ordered),
+        )
+    else:
+        extraction_results = await asyncio.gather(*extraction_tasks, return_exceptions=True)
+        enrichment_result = None
+
+    if not isinstance(extraction_results, list):
+        extraction_results = []
 
     extracted: list[PaperMetadata] = []
     failed_count = 0
-    for r, paper in zip(results, approved_ordered):
+    for r, paper in zip(extraction_results, approved_ordered):
         if isinstance(r, BaseException):
             logger.error(
                 "ContributionExtraction failed for paper '%s' (ID: %s): %s",
@@ -349,23 +372,23 @@ async def extractor_agent(state: AgentState) -> dict[str, Any]:
 
     logs = [log_msg]
 
-    papers_needing_pdf = [p for p in extracted if not p.pdf_url]
-    if papers_needing_pdf:
-        logger.info(
-            "extractor_agent: enriching %d papers with full-text URLs",
-            len(papers_needing_pdf),
-        )
-        try:
-            enriched = await enrich_papers_with_fulltext(
-                extracted, concurrency=FULLTEXT_CONCURRENCY
-            )
-            pdf_count = sum(1 for p in enriched if p.pdf_url)
-            pdf_log = f"Found full-text PDFs for {pdf_count}/{len(enriched)} papers"
-            logger.info("extractor_agent: %s", pdf_log)
-            logs.append(pdf_log)
-            extracted = enriched
-        except Exception as e:
-            logger.warning("extractor_agent: full-text enrichment failed: %s", e)
+    if enrichment_result is not None:
+        pdf_map: dict[str, str] = {}
+        for p in enrichment_result:
+            if p.pdf_url:
+                pdf_map[p.paper_id] = p.pdf_url
+        if pdf_map:
+            merged: list[PaperMetadata] = []
+            for p in extracted:
+                if not p.pdf_url and p.paper_id in pdf_map:
+                    merged.append(p.model_copy(update={"pdf_url": pdf_map[p.paper_id]}))
+                else:
+                    merged.append(p)
+            extracted = merged
+        pdf_count = sum(1 for p in extracted if p.pdf_url)
+        pdf_log = f"Found full-text PDFs for {pdf_count}/{len(extracted)} papers"
+        logger.info("extractor_agent: %s", pdf_log)
+        logs.append(pdf_log)
 
     return {
         "approved_papers": approved,
