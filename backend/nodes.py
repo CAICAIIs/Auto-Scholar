@@ -578,7 +578,7 @@ async def _generate_section(
 
 
 async def writer_agent(state: AgentState) -> dict[str, Any]:
-    approved = state.get("approved_papers", [])
+    approved = state.get("selected_papers") or state.get("approved_papers", [])
     papers_with_contributions = [p for p in approved if p.core_contribution]
     output_language = state.get("output_language", "en")
     is_continuation = state.get("is_continuation", False)
@@ -756,7 +756,7 @@ async def critic_agent(state: AgentState) -> dict[str, Any]:
             "agent_handoffs": ["writer→critic"],
         }
 
-    approved = state.get("approved_papers", [])
+    approved = state.get("selected_papers") or state.get("approved_papers", [])
     num_papers = len(approved)
     valid_indices: set[int] = set(range(1, num_papers + 1))
 
@@ -871,7 +871,7 @@ async def reflection_agent(state: AgentState) -> dict[str, Any]:
         }
 
     error_list = "\n".join(f"- {e}" for e in qa_errors)
-    num_papers = len(state.get("approved_papers", []))
+    num_papers = len(state.get("selected_papers") or state.get("approved_papers", []))
 
     logger.info(
         "reflection_agent: analyzing %d QA errors (retry %d)",
