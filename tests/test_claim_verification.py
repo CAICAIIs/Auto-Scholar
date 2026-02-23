@@ -329,7 +329,67 @@ class TestCriticAgentIntegration:
 
 
 class TestBatchClaimExtraction:
+    async def test_extract_all_claims_with_3_section_batch(self):
+        """Test batch extraction with exactly 3 sections (batch size)."""
+        from backend.schemas import DraftOutput, ReviewSection
+
+        draft = DraftOutput(
+            title="Literature Review",
+            sections=[
+                ReviewSection(
+                    heading="Introduction",
+                    content="The transformer architecture {cite:1} revolutionized NLP.",
+                ),
+                ReviewSection(
+                    heading="Methods",
+                    content="Self-attention {cite:2} enables parallel computation.",
+                ),
+                ReviewSection(
+                    heading="Results",
+                    content="BERT {cite:3} achieves state-of-the-art performance.",
+                ),
+            ],
+        )
+
+        async def mock_batch_extraction(*args, **kwargs):
+            """Mock successful batch extraction returning claims for all 3 sections."""
+            return [
+                Claim(
+                    claim_id="s0_c0",
+                    text="The transformer architecture revolutionized NLP.",
+                    section_index=0,
+                    citation_indices=[1],
+                ),
+                Claim(
+                    claim_id="s1_c0",
+                    text="Self-attention enables parallel computation.",
+                    section_index=1,
+                    citation_indices=[2],
+                ),
+                Claim(
+                    claim_id="s2_c0",
+                    text="BERT achieves state-of-the-art performance.",
+                    section_index=2,
+                    citation_indices=[3],
+                ),
+            ]
+
+        with patch(
+            "backend.utils.claim_verifier._extract_claims_batch",
+            side_effect=mock_batch_extraction,
+        ):
+            results = await extract_all_claims(draft)
+
+            assert len(results) == 3
+            assert results[0].section_index == 0
+            assert results[1].section_index == 1
+            assert results[2].section_index == 2
+            assert results[0].citation_indices == [1]
+            assert results[1].citation_indices == [2]
+            assert results[2].citation_indices == [3]
+
     async def test_extract_all_claims_batch_failure_fallback_to_per_section(self):
+        """Test fallback to per-section extraction when batch extraction fails."""
         from backend.schemas import DraftOutput, ReviewSection
 
         draft = DraftOutput(
