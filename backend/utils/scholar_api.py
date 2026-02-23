@@ -9,6 +9,7 @@ import aiohttp
 from dotenv import load_dotenv
 from tenacity import retry, retry_if_exception_type, stop_after_attempt, wait_exponential
 
+from backend.evaluation.cost_tracker import record_search_call
 from backend.schemas import PaperMetadata, PaperSource, ResearchPlan
 from backend.utils.http_pool import get_session
 from backend.utils.source_tracker import record_failure, record_success, should_skip
@@ -323,6 +324,7 @@ async def search_semantic_scholar(
                 result = await _fetch_semantic_scholar(
                     session, query, limit=limit_per_query, offset=0
                 )
+                record_search_call("semantic_scholar")
                 return [
                     _parse_semantic_scholar_paper(raw)
                     for raw in result.get("data", [])
@@ -363,6 +365,7 @@ async def search_arxiv(
         if isinstance(r, BaseException):
             logger.error("arXiv search failed: %s", r)
             continue
+        record_search_call("arxiv")
         for paper in _parse_arxiv_papers(r):
             if paper.paper_id and paper.paper_id not in seen_ids:
                 seen_ids.add(paper.paper_id)
@@ -384,6 +387,7 @@ async def search_pubmed(
         if isinstance(r, BaseException):
             logger.error("PubMed ID search failed: %s", r)
             continue
+        record_search_call("pubmed")
         for pmid in r:
             if pmid not in seen_pmids:
                 seen_pmids.add(pmid)

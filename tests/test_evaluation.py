@@ -11,6 +11,7 @@ from backend.evaluation.cost_tracker import (
     parse_cost_from_logs,
     record_llm_usage,
     record_node_timing,
+    record_search_call,
     reset_tracking,
 )
 from backend.evaluation.runner import _merge_cost_results, run_evaluation
@@ -302,9 +303,30 @@ class TestCostTracker:
 
     def test_reset_tracking(self):
         record_llm_usage(prompt_tokens=100, completion_tokens=50)
+        record_search_call("semantic_scholar")
         reset_tracking()
         result = get_cost_efficiency_from_tracking()
         assert result.total_tokens == 0
+        assert result.total_search_calls == 0
+
+    def test_record_search_calls(self):
+        record_search_call("semantic_scholar")
+        record_search_call("arxiv")
+        record_search_call("pubmed")
+        record_search_call("semantic_scholar")
+
+        result = get_cost_efficiency_from_tracking()
+        assert result.total_search_calls == 4
+
+    def test_search_calls_combined_with_llm(self):
+        record_llm_usage(prompt_tokens=100, completion_tokens=50, model="gpt-4o")
+        record_search_call("semantic_scholar")
+        record_search_call("arxiv")
+
+        result = get_cost_efficiency_from_tracking()
+        assert result.total_llm_calls == 1
+        assert result.total_search_calls == 2
+        assert result.total_tokens == 150
 
 
 class TestEvaluationRunner:

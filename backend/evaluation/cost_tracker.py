@@ -6,6 +6,11 @@ from backend.evaluation.schemas import CostEfficiencyResult
 
 _usage_records: list[dict[str, Any]] = []
 _timing_records: list[dict[str, Any]] = []
+_search_records: list[dict[str, str]] = []
+
+
+def record_search_call(source: str) -> None:
+    _search_records.append({"source": source, "timestamp": str(time.time())})
 
 
 def record_llm_usage(
@@ -38,12 +43,14 @@ def record_node_timing(node: str, duration_ms: float) -> None:
 def reset_tracking() -> None:
     _usage_records.clear()
     _timing_records.clear()
+    _search_records.clear()
 
 
 def get_cost_efficiency_from_tracking() -> CostEfficiencyResult:
     total_prompt = sum(r["prompt_tokens"] for r in _usage_records)
     total_completion = sum(r["completion_tokens"] for r in _usage_records)
     total_llm_calls = len(_usage_records)
+    total_search_calls = len(_search_records)
 
     node_timings: dict[str, float] = {}
     for r in _timing_records:
@@ -56,7 +63,7 @@ def get_cost_efficiency_from_tracking() -> CostEfficiencyResult:
         prompt_tokens=total_prompt,
         completion_tokens=total_completion,
         total_llm_calls=total_llm_calls,
-        total_search_calls=0,
+        total_search_calls=total_search_calls,
         total_latency_ms=total_latency,
         node_timings=node_timings,
     )
