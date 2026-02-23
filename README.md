@@ -68,6 +68,11 @@ LLM_CONCURRENCY=2
 # Default: 2 (safe for free/low-tier API keys)
 # Recommended: 2-4 for free tier, 4-8 for paid tier
 CLAIM_VERIFICATION_CONCURRENCY=2
+
+# Optional - disable claim verification for time-sensitive scenarios
+# Default: true (maintains 97.3% citation accuracy)
+# Set to "false" to disable and reduce workflow time
+CLAIM_VERIFICATION_ENABLED=true
 ```
 
 ### 3. Start Services
@@ -169,12 +174,16 @@ The following environment variables allow performance tuning for users with high
 |----------|----------|-------------------|-------------|
 | `LLM_CONCURRENCY` | 2 | 2-4 (free tier), 4-8 (paid tier) | Concurrent LLM calls during extraction |
 | `CLAIM_VERIFICATION_CONCURRENCY` | 2 | 2-4 (free tier), 4-8 (paid tier) | Concurrent claim verification calls |
+| `CLAIM_VERIFICATION_ENABLED` | true | true (recommended), false (time-sensitive) | Enable/disable claim verification (maintains 97.3% accuracy when true) |
 
 **Expected improvements with increased concurrency:**
 - `LLM_CONCURRENCY=4`: ~50% reduction in extraction time (25-40s → 13-20s)
 - `LLM_CONCURRENCY=4` + Phase 1.2 + Phase 2.1: 10-paper workflow 50-95s → 35-65s
+- `CLAIM_VERIFICATION_ENABLED=false`: ~8-20s reduction in critic_agent time (trade-off: lower citation accuracy)
 
-**Note:** Increasing concurrency may trigger rate limits on lower-tier API plans. Start with default values and increase gradually.
+**Note:**
+- Increasing concurrency may trigger rate limits on lower-tier API plans. Start with default values and increase gradually.
+- Disabling claim verification (`CLAIM_VERIFICATION_ENABLED=false`) reduces workflow time but may decrease citation accuracy below 97.3%. Only use for time-sensitive scenarios where speed is more important than accuracy.
 
 ### Benchmark and Validation Tools
 

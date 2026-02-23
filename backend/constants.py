@@ -123,7 +123,10 @@ CLAIM_BATCH_SIZE = 3
 # 3 sections per batch balances prompt size vs call reduction.
 # 5 sections → 2 LLM calls instead of 5. Fallback to per-section on failure.
 
-CLAIM_VERIFICATION_ENABLED = True
+# Claim verification can be disabled for time-sensitive scenarios
+# Default: true (maintains 97.3% citation accuracy)
+# Opt-out: Set to "false" to disable claim verification
+CLAIM_VERIFICATION_ENABLED = os.getenv("CLAIM_VERIFICATION_ENABLED", "true").lower() == "true"
 # Feature flag to enable/disable semantic claim verification.
 # Set to False to skip claim-level checks and use only rule-based validation.
 
