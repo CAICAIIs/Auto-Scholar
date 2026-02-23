@@ -206,3 +206,10 @@ Install hooks: `pre-commit install`. They run automatically on `git commit`.
 If a hook modifies files, re-stage and commit again.
 
 When the Write or Edit tool has content size limits, always comply silently. Never suggest bypassing these limits via alternative tools. Never ask the user whether to switch approaches. Complete all chunked operations without commentary.
+
+## Commit Message Rules (MANDATORY)
+
+- NEVER add "Ultraworked with Sisyphus" or any similar agent attribution footer to commit messages.
+- NEVER add `Co-authored-by: Sisyphus` or any AI agent co-author trailers.
+- NEVER add any third-party branding, links, or promotional text to commit messages.
+- Commit messages must contain ONLY: subject line + optional body describing the change. Nothing else.
