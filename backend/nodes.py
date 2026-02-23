@@ -9,6 +9,9 @@ from pydantic import BaseModel
 from backend.constants import (
     CLAIM_VERIFICATION_CONCURRENCY,
     CLAIM_VERIFICATION_ENABLED,
+    CONTEXT_MAX_PAPERS,
+    CONTEXT_OVERFLOW_WARNING_THRESHOLD,
+    CONTEXT_TOKEN_BUDGET,
     FULLTEXT_CONCURRENCY,
     LLM_CONCURRENCY,
     MAX_CONVERSATION_TURNS,
@@ -357,9 +360,105 @@ async def extractor_agent(state: AgentState) -> dict[str, Any]:
     }
 
 
-def _build_paper_context(papers: list[PaperMetadata]) -> str:
+def _estimate_paper_tokens(paper: PaperMetadata) -> int:
+    parts = [paper.title, paper.core_contribution or ""]
+    sc = paper.structured_contribution
+    if sc:
+        for field in (
+            sc.problem,
+            sc.method,
+            sc.novelty,
+            sc.dataset,
+            sc.baseline,
+            sc.results,
+            sc.limitations,
+            sc.future_work,
+        ):
+            if field:
+                parts.append(field)
+    elif paper.abstract:
+        parts.append(paper.abstract[:200])
+    text = " ".join(parts)
+    return max(int(len(text.split()) * 1.3), 20)
+
+
+def _prioritize_by_sub_questions(
+    papers: list[PaperMetadata],
+    research_plan: ResearchPlan,
+) -> list[PaperMetadata]:
+    reserved: list[PaperMetadata] = []
+    remaining = list(papers)
+
+    for sq in sorted(research_plan.sub_questions, key=lambda s: s.priority):
+        best = _find_best_keyword_match(remaining, sq.keywords)
+        if best:
+            reserved.append(best)
+            remaining.remove(best)
+
+    return reserved + remaining
+
+
+def _find_best_keyword_match(
+    papers: list[PaperMetadata],
+    keywords: list[str],
+) -> PaperMetadata | None:
+    if not papers or not keywords:
+        return None
+    lower_keywords = [k.lower() for k in keywords]
+
+    def score(p: PaperMetadata) -> int:
+        title_lower = p.title.lower()
+        return sum(1 for kw in lower_keywords if kw in title_lower)
+
+    scored = [(score(p), p) for p in papers]
+    scored.sort(key=lambda x: x[0], reverse=True)
+    return scored[0][1] if scored[0][0] > 0 else papers[0]
+
+
+def _build_paper_context(
+    papers: list[PaperMetadata],
+    research_plan: ResearchPlan | None = None,
+    token_budget: int = CONTEXT_TOKEN_BUDGET,
+) -> str:
+    if not papers:
+        return ""
+
+    if len(papers) > CONTEXT_OVERFLOW_WARNING_THRESHOLD:
+        logger.warning(
+            "paper count %d exceeds warning threshold %d",
+            len(papers),
+            CONTEXT_OVERFLOW_WARNING_THRESHOLD,
+        )
+
+    if len(papers) > CONTEXT_MAX_PAPERS:
+        logger.warning(
+            "paper count %d exceeds hard limit %d, truncating",
+            len(papers),
+            CONTEXT_MAX_PAPERS,
+        )
+        papers = papers[:CONTEXT_MAX_PAPERS]
+
+    if research_plan and research_plan.sub_questions:
+        papers = _prioritize_by_sub_questions(papers, research_plan)
+
+    selected: list[PaperMetadata] = []
+    estimated_tokens = 0
+    for p in papers:
+        paper_tokens = _estimate_paper_tokens(p)
+        if estimated_tokens + paper_tokens > token_budget and selected:
+            logger.info(
+                "context budget reached: %d/%d tokens, %d/%d papers included",
+                estimated_tokens,
+                token_budget,
+                len(selected),
+                len(papers),
+            )
+            break
+        selected.append(p)
+        estimated_tokens += paper_tokens
+
     lines: list[str] = []
-    for i, p in enumerate(papers, 1):
+    for i, p in enumerate(selected, 1):
         paper_info = [
             f"[{i}] {p.title} (Year: {p.year or 'N/A'})",
             f"    Authors: {', '.join(p.authors[:3])}{'...' if len(p.authors) > 3 else ''}",
@@ -487,7 +586,10 @@ async def writer_agent(state: AgentState) -> dict[str, Any]:
             "agent_handoffs": ["extractor→writer"],
         }
 
-    paper_context = _build_paper_context(papers_with_contributions)
+    paper_context = _build_paper_context(
+        papers_with_contributions,
+        research_plan=state.get("research_plan"),
+    )
     user_query = state["user_query"]
     qa_errors = state.get("qa_errors", [])
     retry_count = state.get("retry_count", 0)
