@@ -5,12 +5,26 @@ const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000"
 const ERROR_MESSAGES: Record<number, string> = {
   504: "研究超时，请缩小搜索范围后重试",
   429: "请求过于频繁，请稍后再试",
-  500: "服务器内部错误，请稍后重试",
+  500: "服务器内部错误",
   503: "服务暂时不可用，请稍后重试",
 }
 
-function getReadableError(status: number, detail: string): string {
-  return ERROR_MESSAGES[status] ?? detail ?? `请求失败 (${status})`
+function _extractDetail(raw: string): string {
+  try {
+    const parsed = JSON.parse(raw)
+    if (typeof parsed.detail === "string") return parsed.detail
+  } catch {
+    // not JSON — use raw text
+  }
+  return raw
+}
+
+function getReadableError(status: number, rawBody: string): string {
+  const base = ERROR_MESSAGES[status]
+  const detail = _extractDetail(rawBody)
+  if (base && detail) return `${base}: ${detail}`
+  if (base) return base
+  return detail || `请求失败 (${status})`
 }
 
 class ApiError extends Error {

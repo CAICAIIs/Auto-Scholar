@@ -486,11 +486,14 @@ async def search_papers_multi_source(
 async def search_by_plan(
     plan: ResearchPlan,
     default_limit: int = 10,
+    allowed_sources: list[PaperSource] | None = None,
 ) -> list[PaperMetadata]:
     """Search papers per sub-question with differentiated sources and limits.
 
     Each sub-question uses its preferred_source and estimated_papers count.
     All sub-question searches run in parallel; results are cross-deduplicated.
+    If allowed_sources is provided, only those sources are used; sub-questions
+    preferring a disallowed source fall back to the first allowed source.
     """
     if not plan.sub_questions:
         return []
@@ -506,6 +509,8 @@ async def search_by_plan(
 
     for sq in plan.sub_questions:
         source = sq.preferred_source
+        if allowed_sources and source not in allowed_sources:
+            source = allowed_sources[0]
         limit = sq.estimated_papers or default_limit
 
         if should_skip(source.value):
