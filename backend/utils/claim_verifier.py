@@ -171,7 +171,7 @@ async def extract_all_claims(draft: DraftOutput) -> list[Claim]:
     if not section_indices_with_citations:
         return []
 
-    all_claims: list[Claim] = []
+    all_claims = []
 
     batches: list[list[int]] = []
     for i in range(0, len(section_indices_with_citations), CLAIM_BATCH_SIZE):

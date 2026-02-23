@@ -135,7 +135,7 @@ async def _call_llm(
     logger.info("LLM request starting (model=%s, max_tokens=%s)", model, effective_max_tokens)
     start_time = time.perf_counter()
     try:
-        completion = await client.chat.completions.create(  # type: ignore[call-overload]
+        completion = await client.chat.completions.create(  # type: ignore[call-overload,arg-type]
             model=model,
             messages=augmented_messages,
             response_format={"type": "json_object"},
