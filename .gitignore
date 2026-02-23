@@ -40,6 +40,8 @@ ENV/
 .coverage
 htmlcov/
 test_checkpoints_*.db
+test_checkpoints_*.db-shm
+test_checkpoints_*.db-wal
 test_conversation_*.db
 test_conversation_*.db-shm
 test_conversation_*.db-wal
