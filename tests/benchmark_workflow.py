@@ -13,10 +13,10 @@ Prerequisites:
       * LLM_CONCURRENCY=2 (baseline) and LLM_CONCURRENCY=4 (optimized)
 """
 
-import asyncio
-import time
 import argparse
+import asyncio
 import os
+import time
 from pathlib import Path
 from typing import Any
 
@@ -111,7 +111,7 @@ class WorkflowBenchmark:
             print(f"  → Session started: {self.session_id} ({elapsed:.2f}s)")
 
             # Step 2: Approve papers (for benchmark, we'll auto-approve first N)
-            print(f"\n[2/5] Retrieving candidate papers...")
+            print("\n[2/5] Retrieving candidate papers...")
             start = time.perf_counter()
 
             async with httpx.AsyncClient(timeout=300.0) as client:
@@ -149,7 +149,7 @@ class WorkflowBenchmark:
             print(f"  → Found {len(papers)} papers, approving {len(paper_ids)}")
 
             # Step 3: Approve papers and continue
-            print(f"\n[3/5] Approving papers and continuing extraction...")
+            print("\n[3/5] Approving papers and continuing extraction...")
             start = time.perf_counter()
 
             async with httpx.AsyncClient(timeout=300.0) as client:
@@ -163,7 +163,7 @@ class WorkflowBenchmark:
             print(f"  → Papers approved ({elapsed:.2f}s)")
 
             # Step 4: Wait for workflow to complete
-            print(f"\n[4/5] Waiting for workflow completion...")
+            print("\n[4/5] Waiting for workflow completion...")
             workflow_complete = False
             max_wait = 180
             start_wait = time.perf_counter()
@@ -196,7 +196,7 @@ class WorkflowBenchmark:
                 return metrics
 
             # Step 5: Get final results
-            print(f"\n[5/5] Retrieving final draft...")
+            print("\n[5/5] Retrieving final draft...")
             start = time.perf_counter()
 
             async with httpx.AsyncClient(timeout=300.0) as client:
@@ -234,7 +234,7 @@ class WorkflowBenchmark:
     ) -> list[WorkflowMetrics]:
         """Run multiple iterations and aggregate metrics."""
         print(f"\n{'=' * 60}")
-        print(f"WORKFLOW BENCHMARK SUITE")
+        print("WORKFLOW BENCHMARK SUITE")
         print(f"{'=' * 60}")
         print(f"Query: {query}")
         print(f"Iterations: {iterations}")

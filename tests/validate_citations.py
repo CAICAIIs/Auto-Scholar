@@ -246,8 +246,9 @@ def run_regression_test_session(session_id: str, expected_accuracy: float = 97.0
     Returns:
         None: 打印回归测试结果
     """
-    import httpx
     import asyncio
+
+    import httpx
 
     base_url = "http://localhost:8000"
 
@@ -281,7 +282,7 @@ def run_regression_test_session(session_id: str, expected_accuracy: float = 97.0
             print("REGRESSION TEST RESULTS")
             print("=" * 60)
             print(f"Session ID: {session_id}")
-            print(f"\nClaim Verification:")
+            print("\nClaim Verification:")
             print(f"  Total Verifications: {total_verifications}")
             print(f"  Entails: {entails_count}")
             print(f"  Insufficient: {insufficient_count}")
