@@ -19,6 +19,7 @@ from backend.constants import (
     MIN_ENTAILMENT_RATIO,
     PAPERS_PER_QUERY,
     get_draft_max_tokens,
+    get_section_max_tokens,
 )
 from backend.prompts import (
     CONTRIBUTION_EXTRACTION_SYSTEM,
@@ -564,7 +565,7 @@ async def _generate_section(
             },
         ],
         response_model=ReviewSection,
-        max_tokens=1500,
+        max_tokens=get_section_max_tokens(num_papers),
     )
     return ReviewSection(heading=section_title, content=result.content)
 

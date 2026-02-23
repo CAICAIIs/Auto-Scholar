@@ -52,9 +52,17 @@ DRAFT_BASE_TOKENS = 2000
 DRAFT_TOKENS_PER_PAPER = 200
 DRAFT_MAX_TOKENS = 8000
 
+SECTION_BASE_TOKENS = 1500
+SECTION_TOKENS_PER_PAPER = 50
+SECTION_MAX_TOKENS = 4000
+
 
 def get_draft_max_tokens(num_papers: int) -> int:
     return min(DRAFT_MAX_TOKENS, DRAFT_BASE_TOKENS + num_papers * DRAFT_TOKENS_PER_PAPER)
+
+
+def get_section_max_tokens(num_papers: int) -> int:
+    return min(SECTION_MAX_TOKENS, SECTION_BASE_TOKENS + num_papers * SECTION_TOKENS_PER_PAPER)
 
 
 # =============================================================================
