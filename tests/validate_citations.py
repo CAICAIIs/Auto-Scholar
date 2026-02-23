@@ -232,5 +232,88 @@ def main() -> None:
     print("这是 QA 机制的已知局限——验证引用存在性但不验证语义相关性。")
 
 
+def run_regression_test_session(session_id: str, expected_accuracy: float = 97.0) -> None:
+    """
+    运行回归测试：验证新的工作流结果是否达到预期的引用准确率。
+
+    Usage:
+        python -c "from tests.validate_citations import run_regression_test_session; run_regression_test_session('your-session-id')"
+
+    Args:
+        session_id: 已完成的工作流会话 ID
+        expected_accuracy: 预期准确率（默认 97%，对应基线 97.3%）
+
+    Returns:
+        None: 打印回归测试结果
+    """
+    import httpx
+    import asyncio
+
+    base_url = "http://localhost:8000"
+
+    async def _run_validation():
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            response = await client.get(f"{base_url}/status/{session_id}")
+            response.raise_for_status()
+            data = response.json()
+
+            if data.get("stage") != "done":
+                print(
+                    f"❌ Error: Session {session_id} is not complete (stage: {data.get('stage')})"
+                )
+                return
+
+            draft = data.get("final_draft")
+            claim_verification = draft.get("claim_verification")
+
+            if not claim_verification:
+                print("❌ Error: No claim verification results found")
+                return
+
+            total_verifications = claim_verification.get("total_verifications", 0)
+            entails_count = claim_verification.get("entails_count", 0)
+            contradicts_count = claim_verification.get("contradicts_count", 0)
+            insufficient_count = claim_verification.get("insufficient_count", 0)
+
+            accuracy = (entails_count / total_verifications * 100) if total_verifications > 0 else 0
+
+            print("\n" + "=" * 60)
+            print("REGRESSION TEST RESULTS")
+            print("=" * 60)
+            print(f"Session ID: {session_id}")
+            print(f"\nClaim Verification:")
+            print(f"  Total Verifications: {total_verifications}")
+            print(f"  Entails: {entails_count}")
+            print(f"  Insufficient: {insufficient_count}")
+            print(f"  Contradicts: {contradicts_count}")
+            print(f"\nAccuracy: {accuracy:.1f}%")
+            print(f"Target: {expected_accuracy:.1f}%")
+
+            if accuracy >= expected_accuracy:
+                print(
+                    f"\n✅ PASS: Accuracy ({accuracy:.1f}%) meets or exceeds target ({expected_accuracy:.1f}%)"
+                )
+                print("   No regression detected in citation accuracy")
+            else:
+                print(
+                    f"\n❌ FAIL: Accuracy ({accuracy:.1f}%) below target ({expected_accuracy:.1f}%)"
+                )
+                print("   REGRESSION DETECTED in citation accuracy!")
+                print("   Possible causes:")
+                print("   - Batch extraction introduced quality degradation")
+                print("   - Concurrency tuning caused rate limit errors affecting quality")
+                print("   - Prompt changes affected claim extraction")
+            print("=" * 60)
+
+    asyncio.run(_run_validation())
+
+
 if __name__ == "__main__":
-    main()
+    # Check if running with regression test argument
+    if len(sys.argv) > 1 and sys.argv[1] == "--regression":
+        if len(sys.argv) < 3:
+            print("Usage: python tests/validate_citations.py --regression <session-id>")
+            sys.exit(1)
+        run_regression_test_session(sys.argv[2])
+    else:
+        main()
