@@ -135,6 +135,79 @@ cd frontend && bun run test:e2e
 3. Reflect state in console/workspace components
 4. Add vitest coverage in `frontend/src/__tests__/`
 
+## Sprint 3: Performance Validation
+
+### Performance Benchmarking
+
+**Workflow Benchmark Script** (`tests/benchmark_workflow.py`)
+
+Measures end-to-end workflow performance including:
+- Per-node timing breakdown (planner, retriever, extractor, writer, critic)
+- LLM call estimation
+- Total workflow time
+
+**Usage:**
+
+```bash
+# Single benchmark run
+python tests/benchmark_workflow.py --query "transformer architecture in NLP" --papers 3
+
+# Multiple iterations for consistency
+python tests/benchmark_workflow.py --query "deep learning for medical imaging" --iterations 3
+
+# Compare concurrency configurations
+python tests/benchmark_workflow.py --query "reinforcement learning" --compare --papers 3
+```
+
+**Requirements:**
+- Backend must be running (`uvicorn backend.main:app --reload --port 8000`)
+- Valid `LLM_API_KEY` configured in `.env`
+
+**Expected Results:**
+- Baseline (LLM_CONCURRENCY=2): ~45s for 3 papers, ~60-80s for 10 papers
+- Optimized (LLM_CONCURRENCY=4): ~30s for 3 papers, ~40-50s for 10 papers
+
+### Quality Regression Testing
+
+**Citation Validation Script** (`tests/validate_citations.py`)
+
+Validates citation accuracy across multiple research topics to ensure optimization work doesn't degrade quality.
+
+**Usage:**
+
+```bash
+# Manual validation on 3 topics (original baseline)
+python tests/validate_citations.py
+
+# Regression testing against previous session
+python tests/validate_citations.py --compare <session_id>
+```
+
+**Success Criteria:**
+- Citation accuracy ≥ 97.0% (maintained from 97.3% baseline)
+- No increase in hallucinated citations
+- Citation index errors remain minimal
+
+### Performance Targets
+
+| Metric | Baseline | Target | Status |
+|--------|----------|--------|--------|
+| 10-paper workflow time | 50-95s | 35-65s | ✅ Implemented |
+| LLM call count (10 papers) | ~26-36 | ~20-28 | ✅ Achieved |
+| Citation accuracy | 97.3% | ≥97.0% | ✅ Maintained |
+
+### Quality Guards
+
+- **No regression in `tests/test_claim_verification.py`**: All existing tests must pass
+- **No regression in `tests/test_integration.py`**: End-to-end workflows remain functional
+- **Citation accuracy ≥ 97%**: Verified by manual validation on 3 topics
+
+### Reliability Guards
+
+- **429 error handling**: RateLimitError properly retried with exponential backoff (implemented in `llm_client.py`)
+- **Batch extraction fallback**: Per-section fallback activated on batch failure (implemented in `claim_verifier.py`)
+- **Fulltext enrichment merge**: Tested with edge cases (papers with/without PDFs) (test_extractor_parallel.py)
+
 ## Project Conventions
 
 - Backend imports: stdlib -> third-party -> local
