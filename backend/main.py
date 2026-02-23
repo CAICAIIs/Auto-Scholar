@@ -84,7 +84,15 @@ async def start_research(req: StartRequest):
     config = _get_config(thread_id)
     graph = app.state.graph
 
-    sources = req.sources if req.sources else [PaperSource.SEMANTIC_SCHOLAR]
+    sources = (
+        req.sources
+        if req.sources
+        else [
+            PaperSource.SEMANTIC_SCHOLAR,
+            PaperSource.ARXIV,
+            PaperSource.PUBMED,
+        ]
+    )
     source_names = [s.value for s in sources]
     logger.info(
         "Starting research for thread %s: %s (sources: %s)", thread_id, req.query, source_names

@@ -90,7 +90,7 @@ const initialState = {
   isEditing: false,
   error: null,
   outputLanguage: "en" as const,
-  searchSources: ["semantic_scholar"] as PaperSource[],
+  searchSources: ["semantic_scholar", "arxiv", "pubmed"] as PaperSource[],
   messages: [] as ConversationMessage[],
   processingStage: null as ProcessingStage | null,
   paperProcessingStates: new Map<string, PaperProcessingState>(),

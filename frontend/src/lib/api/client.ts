@@ -72,7 +72,7 @@ async function request<T>(endpoint: string, options?: RequestInit): Promise<T> {
 export async function startResearch(
   query: string,
   language: "en" | "zh" = "en",
-  sources: PaperSource[] = ["semantic_scholar"]
+  sources: PaperSource[] = ["semantic_scholar", "arxiv", "pubmed"]
 ): Promise<StartResponse> {
   const body: StartRequest = { query, language, sources }
   return request<StartResponse>("/api/research/start", {

@@ -17,7 +17,7 @@ describe('useResearchStore', () => {
       expect(state.approvedPapers).toEqual([])
       expect(state.draft).toBeNull()
       expect(state.outputLanguage).toBe('en')
-      expect(state.searchSources).toEqual(['semantic_scholar'])
+      expect(state.searchSources).toEqual(['semantic_scholar', 'arxiv', 'pubmed'])
     })
   })
 
@@ -213,7 +213,7 @@ describe('useResearchStore', () => {
       expect(state.status).toBe('idle')
       expect(state.logs).toEqual([])
       expect(state.outputLanguage).toBe('en')
-      expect(state.searchSources).toEqual(['semantic_scholar'])
+      expect(state.searchSources).toEqual(['semantic_scholar', 'arxiv', 'pubmed'])
     })
   })
 })
