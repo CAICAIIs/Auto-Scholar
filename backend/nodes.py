@@ -10,7 +10,6 @@ from backend.constants import (
     CLAIM_VERIFICATION_CONCURRENCY,
     CLAIM_VERIFICATION_ENABLED,
     CONTEXT_MAX_PAPERS,
-    CONTEXT_OVERFLOW_WARNING_THRESHOLD,
     CONTEXT_TOKEN_BUDGET,
     FULLTEXT_CONCURRENCY,
     LLM_CONCURRENCY,
@@ -437,29 +436,18 @@ def _find_best_keyword_match(
 
 def _build_paper_context(
     papers: list[PaperMetadata],
-    research_plan: ResearchPlan | None = None,
     token_budget: int = CONTEXT_TOKEN_BUDGET,
 ) -> str:
     if not papers:
         return ""
 
-    if len(papers) > CONTEXT_OVERFLOW_WARNING_THRESHOLD:
-        logger.warning(
-            "paper count %d exceeds warning threshold %d",
-            len(papers),
-            CONTEXT_OVERFLOW_WARNING_THRESHOLD,
-        )
-
     if len(papers) > CONTEXT_MAX_PAPERS:
         logger.warning(
-            "paper count %d exceeds hard limit %d, truncating",
+            "paper count %d exceeds hard limit %d, truncating (legacy data?)",
             len(papers),
             CONTEXT_MAX_PAPERS,
         )
         papers = papers[:CONTEXT_MAX_PAPERS]
-
-    if research_plan and research_plan.sub_questions:
-        papers = _prioritize_by_sub_questions(papers, research_plan)
 
     selected: list[PaperMetadata] = []
     estimated_tokens = 0
@@ -606,10 +594,7 @@ async def writer_agent(state: AgentState) -> dict[str, Any]:
             "agent_handoffs": ["extractor→writer"],
         }
 
-    paper_context = _build_paper_context(
-        papers_with_contributions,
-        research_plan=state.get("research_plan"),
-    )
+    paper_context = _build_paper_context(papers_with_contributions)
     user_query = state["user_query"]
     qa_errors = state.get("qa_errors", [])
     retry_count = state.get("retry_count", 0)

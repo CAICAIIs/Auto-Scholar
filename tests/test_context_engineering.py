@@ -2,7 +2,6 @@ import logging
 
 from backend.constants import (
     CONTEXT_MAX_PAPERS,
-    CONTEXT_OVERFLOW_WARNING_THRESHOLD,
 )
 from backend.nodes import (
     _build_paper_context,
@@ -216,39 +215,18 @@ class TestBuildPaperContext:
         paper_count = context.count("\n\n") + 1 if context else 0
         assert paper_count <= CONTEXT_MAX_PAPERS
 
-    def test_logs_warning_when_exceeding_overflow_threshold(self, caplog):
-        count = CONTEXT_OVERFLOW_WARNING_THRESHOLD + 5
-        papers = [_make_paper(f"p{i}") for i in range(count)]
-        with caplog.at_level(logging.WARNING):
-            _build_paper_context(papers, token_budget=999999)
-        assert f"exceeds warning threshold {CONTEXT_OVERFLOW_WARNING_THRESHOLD}" in caplog.text
-
-    def test_no_warning_below_threshold(self, caplog):
+    def test_no_warning_below_hard_limit(self, caplog):
         papers = [_make_paper(f"p{i}") for i in range(5)]
         with caplog.at_level(logging.WARNING):
             _build_paper_context(papers)
-        assert "exceeds warning threshold" not in caplog.text
+        assert "exceeds hard limit" not in caplog.text
 
-    def test_applies_sub_question_prioritization(self):
-        papers = [
-            _make_paper("p1", title="Unrelated Topic"),
-            _make_paper("p2", title="Target Keyword Paper"),
-        ]
-        plan = _make_plan(
-            [
-                _make_sub_question(keywords=["target", "keyword"], priority=1),
-            ]
-        )
-        context = _build_paper_context(papers, research_plan=plan, token_budget=500)
-        first_bracket = context.index("[1]")
-        assert "Target Keyword Paper" in context[first_bracket : first_bracket + 100]
-
-    def test_skips_prioritization_without_plan(self):
+    def test_preserves_input_order(self):
         papers = [
             _make_paper("p1", title="First"),
             _make_paper("p2", title="Second"),
         ]
-        context = _build_paper_context(papers, research_plan=None)
+        context = _build_paper_context(papers)
         pos_first = context.index("First")
         pos_second = context.index("Second")
         assert pos_first < pos_second
