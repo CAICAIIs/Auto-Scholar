@@ -130,7 +130,7 @@ After approval, the system will:
 | SSE Network Reduction | 92% | Benchmark test with 263 tokens → 21 flushes |
 | Citation Accuracy | 97.3% | Manual validation of 37 citations across 3 topics |
 | Typical Workflow Time | ~45s | 3 papers end-to-end |
-| Max QA Retries | 3 | Configurable in constants.py |
+| Max QA Retries | 3 | Configurable in workflow.py (`MAX_RETRY_COUNT`) |
 
 ### Benchmark Details
 
