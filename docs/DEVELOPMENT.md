@@ -30,7 +30,36 @@ LLM_BASE_URL=https://api.openai.com/v1
 LLM_MODEL=gpt-4o
 SEMANTIC_SCHOLAR_API_KEY=optional
 NEXT_PUBLIC_API_URL=http://localhost:8000
+
+# Optional - LLM concurrency for parallel operations
+# Default: 2 (safe for free/low-tier API keys)
+# Recommended: 2-4 for free tier, 4-8 for paid tier
+# Higher values improve performance but may trigger rate limits
+LLM_CONCURRENCY=2
+
+# Optional - claim verification concurrency
+# Default: 2 (safe for free/low-tier API keys)
+# Recommended: 2-4 for free tier, 4-8 for paid tier
+CLAIM_VERIFICATION_CONCURRENCY=2
 ```
+
+### Performance Tuning Guidance
+
+**LLM Concurrency (`LLM_CONCURRENCY`)**
+- **Free/Low-tier OpenAI**: Use 2-4 (default is 2)
+  - Higher values may trigger 429 rate limit errors
+  - Recommended: Start with 2, increase gradually to 4 if rate limits don't occur
+- **Paid/Team-tier OpenAI**: Use 4-8
+  - Higher tiers allow more concurrent requests
+  - Recommended: 4-6 for balanced performance, up to 8 for maximum throughput
+- **DeepSeek/Zhipu APIs**: Check provider-specific rate limits
+  - May have lower limits than OpenAI
+  - Start conservative, monitor logs for 429 errors
+
+**Claim Verification Concurrency (`CLAIM_VERIFICATION_CONCURRENCY`)**
+- Follows same guidance as `LLM_CONCURRENCY`
+- Lower values (2-4) reduce rate limit risk
+- Higher values (4-8) improve critic_agent speed
 
 ## Run Locally
 
