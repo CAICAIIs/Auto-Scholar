@@ -3,11 +3,19 @@ import re
 from backend.evaluation.schemas import CitationPrecisionResult, CitationRecallResult
 from backend.schemas import DraftOutput, PaperMetadata
 
+# Pre-normalization format: {cite:N}
 CITATION_PATTERN = re.compile(r"\{cite:(\d+)\}")
+# Post-normalization format: [N] (but not [N] inside words like "Fig[1]")
+NORMALIZED_CITATION_PATTERN = re.compile(r"(?<!\w)\[(\d+)\](?!\w)")
 
 
 def extract_citation_indices(text: str) -> list[int]:
-    return [int(m.group(1)) for m in CITATION_PATTERN.finditer(text)]
+    """Extract citation indices from text, supporting both {cite:N} and [N] formats."""
+    raw_indices = [int(m.group(1)) for m in CITATION_PATTERN.finditer(text)]
+    if raw_indices:
+        return raw_indices
+    # Fallback to normalized [N] format when no {cite:N} found
+    return [int(m.group(1)) for m in NORMALIZED_CITATION_PATTERN.finditer(text)]
 
 
 def calculate_citation_precision(draft: DraftOutput, num_approved: int) -> CitationPrecisionResult:

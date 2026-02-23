@@ -141,7 +141,44 @@ class TestCitationMetrics:
         assert result.recall == pytest.approx(1 / 3)
         assert result.uncited_indices == [2, 3]
 
-    def test_citation_recall_empty_papers(self):
+    def test_extract_normalized_citation_indices(self):
+        text = "This review covers key findings [1] and recent advances [3] in the field [2]."
+        indices = extract_citation_indices(text)
+        assert indices == [1, 3, 2]
+
+    def test_extract_prefers_raw_over_normalized(self):
+        text = "Raw {cite:1} and normalized [2] in same text."
+        indices = extract_citation_indices(text)
+        assert indices == [1]
+
+    def test_citation_precision_normalized_format(self):
+        draft = DraftOutput(
+            title="Test",
+            sections=[
+                ReviewSection(
+                    heading="Test",
+                    content="Valid [1] and [2] and invalid [10].",
+                )
+            ],
+        )
+        result = calculate_citation_precision(draft, num_approved=3)
+        assert result.total_citations == 3
+        assert result.valid_citations == 2
+        assert result.invalid_indices == [10]
+
+    def test_citation_recall_normalized_format(self, sample_papers: list[PaperMetadata]):
+        draft = DraftOutput(
+            title="Test",
+            sections=[
+                ReviewSection(heading="Intro", content="First paper [1]."),
+                ReviewSection(heading="Body", content="Second [2] and third [3]."),
+            ],
+        )
+        result = calculate_citation_recall(draft, sample_papers)
+        assert result.recall == 1.0
+        assert result.uncited_indices == []
+
+    def test_citation_recall_empty_papers(s):
         draft = DraftOutput(
             title="Test",
             sections=[ReviewSection(heading="Test", content="Some text.")],

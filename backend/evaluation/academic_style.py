@@ -6,7 +6,7 @@ from backend.constants import (
     PASSIVE_PATTERN_EN,
     PASSIVE_PATTERN_ZH,
 )
-from backend.evaluation.citation_metrics import CITATION_PATTERN
+from backend.evaluation.citation_metrics import CITATION_PATTERN, NORMALIZED_CITATION_PATTERN
 from backend.evaluation.schemas import AcademicStyleResult
 from backend.schemas import DraftOutput
 
@@ -59,6 +59,8 @@ def calculate_academic_style(draft: DraftOutput, language: str = "en") -> Academ
 
     total_words = _count_words(full_text, language)
     citation_count = len(CITATION_PATTERN.findall(full_text))
+    if citation_count == 0:
+        citation_count = len(NORMALIZED_CITATION_PATTERN.findall(full_text))
 
     return AcademicStyleResult(
         total_sentences=total_sentences,
