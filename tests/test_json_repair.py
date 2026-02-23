@@ -1,9 +1,15 @@
-from unittest.mock import AsyncMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 from pydantic import BaseModel
 
 from backend.utils.llm_client import structured_completion
+
+
+@pytest.fixture(autouse=True)
+def _mock_llm_client():
+    with patch("backend.utils.llm_client.get_client", return_value=MagicMock()):
+        yield
 
 
 class SimpleModel(BaseModel):
