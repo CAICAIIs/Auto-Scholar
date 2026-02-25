@@ -8,6 +8,7 @@ import { HistoryPanel } from "./history-panel"
 import { ChatThread } from "./chat-thread"
 import { LanguageSwitcher } from "@/components/language-switcher"
 import { OutputLanguageSelector } from "@/components/output-language-selector"
+import { ModelSelector } from "@/components/model-selector"
 import { useResearchStore } from "@/store/research"
 
 interface AgentConsoleProps {
@@ -26,6 +27,7 @@ export function AgentConsole({ onStartResearch, onContinueResearch, onNewTopic }
       <div className="flex items-center justify-between px-3 py-2 border-b border-zinc-800">
         <h2 className="text-sm font-semibold text-zinc-100">{t('title')}</h2>
         <div className="flex items-center gap-1">
+          <ModelSelector />
           <OutputLanguageSelector />
           <LanguageSwitcher />
         </div>

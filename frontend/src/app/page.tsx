@@ -26,6 +26,7 @@ export default function Home() {
   const reset = useResearchStore((s) => s.reset)
   const outputLanguage = useResearchStore((s) => s.outputLanguage)
   const searchSources = useResearchStore((s) => s.searchSources)
+  const selectedModelId = useResearchStore((s) => s.selectedModelId)
   const addMessage = useResearchStore((s) => s.addMessage)
   const clearMessages = useResearchStore((s) => s.clearMessages)
   const startProcessingSimulation = useResearchStore((s) => s.startProcessingSimulation)
@@ -73,7 +74,7 @@ export default function Home() {
     addMessage(userMessage)
 
     try {
-      const response = await startResearch(query, outputLanguage, searchSources)
+      const response = await startResearch(query, outputLanguage, searchSources, selectedModelId ?? undefined)
       setThreadId(response.thread_id)
       setCandidatePapers(response.candidate_papers)
 
@@ -92,7 +93,7 @@ export default function Home() {
       setError(message)
       addLog("error", message)
     }
-  }, [reset, clearLogs, clearMessages, setStatus, addLog, addMessage, setThreadId, setCandidatePapers, setError, outputLanguage, searchSources, getErrorMessage, t])
+  }, [reset, clearLogs, clearMessages, setStatus, addLog, addMessage, setThreadId, setCandidatePapers, setError, outputLanguage, searchSources, selectedModelId, getErrorMessage, t])
 
   const handleApprove = useCallback(async (paperIds: string[]) => {
     const threadId = useResearchStore.getState().threadId
@@ -167,7 +168,7 @@ export default function Home() {
     addMessage(userMessage)
 
     try {
-      await continueResearch(threadId, message)
+      await continueResearch(threadId, message, selectedModelId ?? undefined)
 
       if (sseCleanupRef.current) sseCleanupRef.current()
       sseCleanupRef.current = createSSEConnection(
@@ -204,7 +205,7 @@ export default function Home() {
       setError(errMessage)
       addLog("error", errMessage)
     }
-  }, [setStatus, addLog, addMessage, setDraft, setCandidatePapers, setError, getErrorMessage, t])
+  }, [setStatus, addLog, addMessage, setDraft, setCandidatePapers, setError, selectedModelId, getErrorMessage, t])
 
   const handleRetry = useCallback(() => {
     if (lastQuery) {
