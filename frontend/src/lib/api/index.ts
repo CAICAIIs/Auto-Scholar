@@ -1,1 +1,1 @@
-export { startResearch, approveResearch, continueResearch, getStatus, createSSEConnection, ApiError } from "./client"
+export { startResearch, approveResearch, continueResearch, getStatus, createSSEConnection, fetchModels, ApiError } from "./client"

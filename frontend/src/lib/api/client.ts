@@ -1,4 +1,4 @@
-import type { StartRequest, StartResponse, ApproveRequest, ApproveResponse, StatusResponse, DraftOutput, Paper, SessionSummary, SessionDetail, PaperSource, ContinueRequest, ContinueResponse } from "@/types"
+import type { StartRequest, StartResponse, ApproveRequest, ApproveResponse, StatusResponse, DraftOutput, Paper, SessionSummary, SessionDetail, PaperSource, ContinueRequest, ContinueResponse, ModelConfig } from "@/types"
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000"
 
@@ -72,9 +72,10 @@ async function request<T>(endpoint: string, options?: RequestInit): Promise<T> {
 export async function startResearch(
   query: string,
   language: "en" | "zh" = "en",
-  sources: PaperSource[] = ["semantic_scholar", "arxiv", "pubmed"]
+  sources: PaperSource[] = ["semantic_scholar", "arxiv", "pubmed"],
+  modelId?: string
 ): Promise<StartResponse> {
-  const body: StartRequest = { query, language, sources }
+  const body: StartRequest = { query, language, sources, model_id: modelId }
   return request<StartResponse>("/api/research/start", {
     method: "POST",
     body: JSON.stringify(body),
@@ -89,8 +90,8 @@ export async function approveResearch(threadId: string, paperIds: string[]): Pro
   })
 }
 
-export async function continueResearch(threadId: string, message: string): Promise<ContinueResponse> {
-  const body: ContinueRequest = { thread_id: threadId, message }
+export async function continueResearch(threadId: string, message: string, modelId?: string): Promise<ContinueResponse> {
+  const body: ContinueRequest = { thread_id: threadId, message, model_id: modelId }
   return request<ContinueResponse>("/api/research/continue", {
     method: "POST",
     body: JSON.stringify(body),
@@ -191,6 +192,10 @@ export async function getCharts(papers: Paper[]): Promise<ChartsResponse> {
     method: "POST",
     body: JSON.stringify({ papers }),
   })
+}
+
+export async function fetchModels(): Promise<ModelConfig[]> {
+  return request<ModelConfig[]>("/api/models")
 }
 
 export { ApiError }
