@@ -33,7 +33,7 @@ from backend.utils.citations import normalize_draft_citations
 from backend.utils.event_queue import StreamingEventQueue
 from backend.utils.exporter import ExportFormat, export_to_docx, export_to_markdown
 from backend.utils.http_pool import close_session
-from backend.utils.llm_client import list_models
+from backend.utils.llm_client import list_models, token_callback_var
 from backend.workflow import create_workflow
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(name)s %(levelname)s %(message)s")
@@ -169,6 +169,11 @@ async def stream_research(thread_id: str):
     event_queue = StreamingEventQueue()
 
     async def producer():
+        async def _on_draft_token(token: str) -> None:
+            token_event = json.dumps({"event": "draft_token", "token": token}, ensure_ascii=False)
+            await event_queue.push(token_event + "\n")
+
+        reset_token = token_callback_var.set(_on_draft_token)
         try:
             async for chunk in graph.astream(None, config=config, stream_mode="updates"):
                 for node_name, updates in chunk.items():
@@ -242,6 +247,7 @@ async def stream_research(thread_id: str):
             logger.error("Stream error for thread %s: %s", thread_id, e)
             await event_queue.push(json.dumps({"event": "error", "detail": str(e)}) + "\n")
         finally:
+            token_callback_var.reset(reset_token)
             await event_queue.close()
 
     async def event_generator():

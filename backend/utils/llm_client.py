@@ -2,6 +2,8 @@ import json
 import logging
 import os
 import time
+from collections.abc import Callable, Coroutine
+from contextvars import ContextVar
 from typing import Any, TypeVar
 
 import httpx
@@ -33,6 +35,11 @@ load_dotenv()
 logger = logging.getLogger(__name__)
 
 T = TypeVar("T", bound=BaseModel)
+
+TokenCallback = Callable[[str], Coroutine[Any, Any, None]]
+token_callback_var: ContextVar[TokenCallback | None] = ContextVar(
+    "token_callback_var", default=None
+)
 
 LLM_TIMEOUT = httpx.Timeout(connect=60.0, read=120.0, write=60.0, pool=60.0)
 
@@ -352,6 +359,73 @@ async def _call_llm(
         raise
 
 
+async def _call_llm_streaming(
+    client: AsyncOpenAI,
+    augmented_messages: list[dict[str, Any]],
+    temperature: float,
+    max_tokens: int | None,
+    on_token: TokenCallback,
+    model_name: str | None = None,
+    use_json_mode: bool = True,
+    task_type: str = "",
+) -> str:
+    effective_model = model_name or get_model()
+    effective_max_tokens = max_tokens or LLM_DEFAULT_MAX_TOKENS
+    logger.info(
+        "LLM streaming request starting (model=%s, max_tokens=%s)",
+        effective_model,
+        effective_max_tokens,
+    )
+    start_time = time.perf_counter()
+    try:
+        kwargs: dict[str, Any] = {
+            "model": effective_model,
+            "messages": augmented_messages,
+            "temperature": temperature,
+            "max_tokens": effective_max_tokens,
+            "stream": True,
+            "stream_options": {"include_usage": True},
+        }
+        if use_json_mode:
+            kwargs["response_format"] = {"type": "json_object"}
+
+        chunks: list[str] = []
+        prompt_tokens = 0
+        completion_tokens = 0
+
+        stream = await client.chat.completions.create(**kwargs)  # type: ignore[call-overload]
+        async for chunk in stream:
+            if chunk.usage:
+                prompt_tokens = chunk.usage.prompt_tokens
+                completion_tokens = chunk.usage.completion_tokens
+            if chunk.choices and chunk.choices[0].delta.content:
+                token = chunk.choices[0].delta.content
+                chunks.append(token)
+                await on_token(token)
+
+        elapsed = time.perf_counter() - start_time
+        logger.info("LLM streaming request completed in %.2fs", elapsed)
+
+        if prompt_tokens or completion_tokens:
+            record_llm_usage(
+                prompt_tokens=prompt_tokens,
+                completion_tokens=completion_tokens,
+                model=effective_model,
+                task_type=task_type,
+            )
+
+        raw_content = "".join(chunks)
+        if not raw_content:
+            raise ValueError("LLM returned empty response")
+        return raw_content
+    except Exception as e:
+        elapsed = time.perf_counter() - start_time
+        logger.error(
+            "LLM streaming request failed after %.2fs: %s: %s", elapsed, type(e).__name__, e
+        )
+        raise
+
+
 async def structured_completion(
     messages: list[ChatCompletionMessageParam],
     response_model: type[T],
@@ -387,15 +461,28 @@ async def structured_completion(
     if not any(m.get("role") == "system" for m in augmented_messages):
         augmented_messages.insert(0, {"role": "system", "content": schema_instruction})
 
-    raw_content = await _call_llm(
-        client,
-        augmented_messages,
-        temperature,
-        max_tokens,
-        model_name=model_name,
-        use_json_mode=supports_json_mode,
-        task_type=task_type or "",
-    )
+    on_token = token_callback_var.get(None)
+    if on_token is not None:
+        raw_content = await _call_llm_streaming(
+            client,
+            augmented_messages,
+            temperature,
+            max_tokens,
+            on_token=on_token,
+            model_name=model_name,
+            use_json_mode=supports_json_mode,
+            task_type=task_type or "",
+        )
+    else:
+        raw_content = await _call_llm(
+            client,
+            augmented_messages,
+            temperature,
+            max_tokens,
+            model_name=model_name,
+            use_json_mode=supports_json_mode,
+            task_type=task_type or "",
+        )
 
     try:
         parsed_json = json.loads(raw_content)
