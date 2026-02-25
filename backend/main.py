@@ -20,6 +20,7 @@ from backend.schemas import (
     ConversationMessage,
     DraftOutput,
     MessageRole,
+    ModelConfig,
     PaperMetadata,
     PaperSource,
     SessionDetail,
@@ -31,6 +32,7 @@ from backend.utils.citations import normalize_draft_citations
 from backend.utils.event_queue import StreamingEventQueue
 from backend.utils.exporter import ExportFormat, export_to_docx, export_to_markdown
 from backend.utils.http_pool import close_session
+from backend.utils.llm_client import list_models
 from backend.workflow import create_workflow
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(name)s %(levelname)s %(message)s")
@@ -526,6 +528,11 @@ async def evaluate_session(thread_id: str):
         language=language,
         claim_verification=claim_verification,
     )
+
+
+@app.get("/api/models", response_model=list[ModelConfig])
+async def get_available_models():
+    return list_models()
 
 
 @app.post("/api/ratings", response_model=HumanRating)
