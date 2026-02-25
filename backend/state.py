@@ -36,3 +36,4 @@ class AgentState(TypedDict):
     claim_verification: ClaimVerificationSummary | None
     research_plan: ResearchPlan | None
     reflection: Reflection | None
+    model_id: str | None

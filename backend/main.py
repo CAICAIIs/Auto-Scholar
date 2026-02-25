@@ -126,6 +126,7 @@ async def start_research(req: StartRequest):
                     "draft_outline": None,
                     "research_plan": None,
                     "reflection": None,
+                    "model_id": req.model_id,
                 },
                 config=config,
             ),
@@ -175,6 +176,30 @@ async def stream_research(thread_id: str):
                         )
                         await event_queue.push(event_str + "\n")
 
+                    # Emit research_plan when planner completes
+                    research_plan = updates.get("research_plan")
+                    if research_plan is not None:
+                        plan_event = json.dumps(
+                            {
+                                "event": "research_plan",
+                                "research_plan": research_plan.model_dump(mode="json"),
+                            },
+                            ensure_ascii=False,
+                        )
+                        await event_queue.push(plan_event + "\n")
+
+                    # Emit reflection when reflection_agent completes
+                    reflection = updates.get("reflection")
+                    if reflection is not None:
+                        reflection_event = json.dumps(
+                            {
+                                "event": "reflection",
+                                "reflection": reflection.model_dump(mode="json"),
+                            },
+                            ensure_ascii=False,
+                        )
+                        await event_queue.push(reflection_event + "\n")
+
             final_state = await graph.aget_state(config)
             values = final_state.values or {}
             final_draft = values.get("final_draft")
@@ -186,10 +211,18 @@ async def stream_research(thread_id: str):
                     selected = [p for p in candidates if p.is_approved]
                 normalize_draft_citations(final_draft, selected)
 
+            # Include research_plan and reflection in completed payload
+            research_plan_val = values.get("research_plan")
+            reflection_val = values.get("reflection")
+
             completed_payload = {
                 "event": "completed",
                 "final_draft": (final_draft.model_dump(mode="json") if final_draft else None),
                 "candidate_papers": [p.model_dump(mode="json") for p in candidates],
+                "research_plan": (
+                    research_plan_val.model_dump(mode="json") if research_plan_val else None
+                ),
+                "reflection": (reflection_val.model_dump(mode="json") if reflection_val else None),
             }
             await event_queue.push(json.dumps(completed_payload, ensure_ascii=False) + "\n")
         except Exception as e:
@@ -302,6 +335,7 @@ async def continue_research(req: ContinueRequest):
             "is_continuation": True,
             "qa_errors": [],
             "retry_count": 0,
+            "model_id": req.model_id,
         },
         as_node="__start__",
     )

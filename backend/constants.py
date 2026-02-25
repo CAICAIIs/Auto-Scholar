@@ -197,3 +197,17 @@ CONTEXT_MAX_PAPERS = 200
 CONTEXT_OVERFLOW_WARNING_THRESHOLD = 100
 # Why 100: Normal workflows produce 15-75 approved papers. Exceeding 100
 # signals something unusual that deserves attention (but is not blocked).
+
+# =============================================================================
+# Multi-Model Configuration
+# =============================================================================
+
+DEFAULT_MODEL_ID = os.getenv("LLM_MODEL_ID", "")
+# Canonical model ID for per-request routing (e.g. "openai:gpt-4o", "ollama:llama3.1:8b").
+# Empty string means use legacy env vars (LLM_BASE_URL + LLM_MODEL).
+
+OLLAMA_BASE_URL = os.getenv("OLLAMA_BASE_URL", "http://localhost:11434/v1")
+OLLAMA_API_KEY = "ollama"
+
+MODEL_REGISTRY_JSON = os.getenv("MODEL_REGISTRY", "")
+# Optional JSON string defining available models. If empty, auto-detected from env vars.
