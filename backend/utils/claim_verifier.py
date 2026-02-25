@@ -62,6 +62,7 @@ async def extract_claims_from_section(
         ],
         response_model=ClaimList,
         temperature=0.1,
+        task_type="qa",
     )
 
     claims: list[Claim] = []
@@ -104,6 +105,7 @@ async def _extract_claims_batch(
         ],
         response_model=BatchClaimList,
         temperature=0.1,
+        task_type="qa",
     )
 
     all_claims: list[Claim] = []
@@ -228,6 +230,7 @@ async def verify_single_claim(
         ],
         response_model=VerificationOutput,
         temperature=0.1,
+        task_type="qa",
     )
 
     label_map: dict[str, EntailmentLabel] = {

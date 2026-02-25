@@ -117,6 +117,7 @@ async def planner_agent(state: AgentState) -> dict[str, Any]:
                 {"role": "user", "content": user_query},
             ],
             response_model=ResearchPlan,
+            task_type="planning",
         )
         elapsed = time.perf_counter() - start_time
         logger.info("planner_agent: CoT planning completed in %.2fs", elapsed)
@@ -155,6 +156,7 @@ async def planner_agent(state: AgentState) -> dict[str, Any]:
             {"role": "user", "content": user_query},
         ],
         response_model=KeywordPlan,
+        task_type="planning",
     )
     elapsed = time.perf_counter() - start_time
     logger.info("planner_agent: LLM call completed in %.2fs", elapsed)
@@ -247,6 +249,7 @@ async def _extract_contribution(paper: PaperMetadata) -> PaperMetadata:
             },
         ],
         response_model=ContributionExtraction,
+        task_type="extraction",
     )
 
     structured_task = structured_completion(
@@ -262,6 +265,7 @@ async def _extract_contribution(paper: PaperMetadata) -> PaperMetadata:
             },
         ],
         response_model=StructuredExtractionResult,
+        task_type="extraction",
     )
 
     core_result, structured_result = await asyncio.gather(core_task, structured_task)
@@ -557,6 +561,7 @@ async def _generate_outline(
             },
         ],
         response_model=DraftOutline,
+        task_type="writing",
     )
 
 
@@ -593,6 +598,7 @@ async def _generate_section(
         ],
         response_model=ReviewSection,
         max_tokens=get_section_max_tokens(num_papers),
+        task_type="writing",
     )
     return ReviewSection(heading=section_title, content=result.content)
 
@@ -686,6 +692,7 @@ async def writer_agent(state: AgentState) -> dict[str, Any]:
             ],
             response_model=DraftOutput,
             max_tokens=get_draft_max_tokens(num_papers),
+            task_type="writing",
         )
         outline = None
     else:
@@ -912,6 +919,7 @@ async def reflection_agent(state: AgentState) -> dict[str, Any]:
             },
         ],
         response_model=Reflection,
+        task_type="reflection",
     )
 
     writer_fixable = sum(1 for e in reflection.entries if e.fixable_by_writer)
