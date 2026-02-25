@@ -3,6 +3,8 @@ export type PaperSource = "semantic_scholar" | "arxiv" | "pubmed"
 
 export type ModelProvider = "openai" | "deepseek" | "ollama" | "custom"
 
+export type CostTier = "low" | "medium" | "high"
+
 export type MessageRole = "user" | "assistant" | "system"
 
 export interface ModelConfig {
@@ -17,6 +19,8 @@ export interface ModelConfig {
   max_output_tokens: number
   is_local: boolean
   enabled: boolean
+  cost_tier?: CostTier
+  fallback_for?: string | null
 }
 
 export interface ConversationMessage {

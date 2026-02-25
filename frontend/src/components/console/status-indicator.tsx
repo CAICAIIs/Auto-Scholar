@@ -18,11 +18,15 @@ export function StatusIndicator() {
   const t = useTranslations('status')
   const status = useResearchStore((s) => s.status)
   const error = useResearchStore((s) => s.error)
+  const totalCostUsd = useResearchStore((s) => s.totalCostUsd)
 
   return (
     <div className="flex items-center gap-2 px-3 py-2 border-t border-zinc-800 text-sm">
       <div className={`w-2 h-2 rounded-full ${statusColors[status]}`} />
       <span className="text-zinc-400">{t(status)}</span>
+      {totalCostUsd > 0 && (
+        <span className="text-zinc-500 text-xs ml-auto">${totalCostUsd.toFixed(4)}</span>
+      )}
       {error && <span className="text-red-400 text-xs truncate">({error})</span>}
     </div>
   )

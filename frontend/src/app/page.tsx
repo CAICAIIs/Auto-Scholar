@@ -37,6 +37,7 @@ export default function Home() {
   const status = useResearchStore((s) => s.status)
   const isRegenerating = useResearchStore((s) => s.isRegenerating)
   const setIsRegenerating = useResearchStore((s) => s.setIsRegenerating)
+  const setTotalCostUsd = useResearchStore((s) => s.setTotalCostUsd)
 
   const prevOutputLanguageRef = useRef(outputLanguage)
 
@@ -86,26 +87,29 @@ export default function Home() {
         if (sseCleanupRef.current) sseCleanupRef.current()
         sseCleanupRef.current = createSSEConnection(
           threadId,
-          (node, log) => addLog(node, log),
-          (data) => {
-            if (data.final_draft) {
-              setDraft(data.final_draft)
-              setCandidatePapers(data.candidate_papers)
-              setStatus("completed")
+          {
+            onMessage: (node, log) => addLog(node, log),
+            onCompleted: (data) => {
+              if (data.final_draft) {
+                setDraft(data.final_draft)
+                setCandidatePapers(data.candidate_papers)
+                setStatus("completed")
+                setIsRegenerating(false)
+                addLog("system", "Draft updated successfully!")
+              } else {
+                setStatus("error")
+                setIsRegenerating(false)
+                setError(t('draftFailed'))
+              }
+              sseCleanupRef.current = null
+            },
+            onError: (error) => {
+              setError(error)
+              addLog("error", error)
               setIsRegenerating(false)
-              addLog("system", "Draft updated successfully!")
-            } else {
-              setStatus("error")
-              setIsRegenerating(false)
-              setError(t('draftFailed'))
-            }
-            sseCleanupRef.current = null
-          },
-          (error) => {
-            setError(error)
-            addLog("error", error)
-            setIsRegenerating(false)
-            sseCleanupRef.current = null
+              sseCleanupRef.current = null
+            },
+            onCostUpdate: (cost) => setTotalCostUsd(cost),
           },
         )
       })
@@ -115,7 +119,7 @@ export default function Home() {
         addLog("error", errMessage)
         setIsRegenerating(false)
       })
-  }, [outputLanguage, draft, status, isRegenerating, setStatus, addLog, setDraft, setCandidatePapers, setError, selectedModelId, getErrorMessage, setIsRegenerating, addMessage, t, tConsole])
+  }, [outputLanguage, draft, status, isRegenerating, setStatus, addLog, setDraft, setCandidatePapers, setError, selectedModelId, getErrorMessage, setIsRegenerating, addMessage, setTotalCostUsd, t, tConsole])
 
   const handleStartResearch = useCallback(async (query: string) => {
     reset()
@@ -176,32 +180,35 @@ export default function Home() {
       if (sseCleanupRef.current) sseCleanupRef.current()
       sseCleanupRef.current = createSSEConnection(
         threadId,
-        (node, log) => addLog(node, log),
-        (data) => {
-          clearProcessingStates()
-          if (data.final_draft) {
-            setDraft(data.final_draft)
-            setStatus("completed")
-            addLog("system", "Literature review completed!")
+        {
+          onMessage: (node, log) => addLog(node, log),
+          onCompleted: (data) => {
+            clearProcessingStates()
+            if (data.final_draft) {
+              setDraft(data.final_draft)
+              setStatus("completed")
+              addLog("system", "Literature review completed!")
 
-            const assistantMessage: ConversationMessage = {
-              role: "assistant",
-              content: `Generated literature review: "${data.final_draft.title}" with ${data.final_draft.sections.length} sections.`,
-              timestamp: new Date().toISOString(),
-              metadata: { action: "draft_completed" },
+              const assistantMessage: ConversationMessage = {
+                role: "assistant",
+                content: `Generated literature review: "${data.final_draft.title}" with ${data.final_draft.sections.length} sections.`,
+                timestamp: new Date().toISOString(),
+                metadata: { action: "draft_completed" },
+              }
+              addMessage(assistantMessage)
+            } else {
+              setStatus("error")
+              setError(t('draftFailed'))
             }
-            addMessage(assistantMessage)
-          } else {
-            setStatus("error")
-            setError(t('draftFailed'))
-          }
-          sseCleanupRef.current = null
-        },
-        (error) => {
-          clearProcessingStates()
-          setError(error)
-          addLog("error", error)
-          sseCleanupRef.current = null
+            sseCleanupRef.current = null
+          },
+          onError: (error) => {
+            clearProcessingStates()
+            setError(error)
+            addLog("error", error)
+            sseCleanupRef.current = null
+          },
+          onCostUpdate: (cost) => setTotalCostUsd(cost),
         },
       )
     } catch (err) {
@@ -210,7 +217,7 @@ export default function Home() {
       setError(message)
       addLog("error", message)
     }
-  }, [setStatus, addLog, setApprovedPapers, setDraft, setError, addMessage, startProcessingSimulation, clearProcessingStates, getErrorMessage, t])
+  }, [setStatus, addLog, setApprovedPapers, setDraft, setError, addMessage, startProcessingSimulation, clearProcessingStates, setTotalCostUsd, getErrorMessage, t])
 
   const handleContinueResearch = useCallback(async (message: string) => {
     const threadId = useResearchStore.getState().threadId
@@ -233,31 +240,34 @@ export default function Home() {
       if (sseCleanupRef.current) sseCleanupRef.current()
       sseCleanupRef.current = createSSEConnection(
         threadId,
-        (node, log) => addLog(node, log),
-        (data) => {
-          if (data.final_draft) {
-            setDraft(data.final_draft)
-            setCandidatePapers(data.candidate_papers)
-            setStatus("completed")
-            addLog("system", "Draft updated successfully!")
+        {
+          onMessage: (node, log) => addLog(node, log),
+          onCompleted: (data) => {
+            if (data.final_draft) {
+              setDraft(data.final_draft)
+              setCandidatePapers(data.candidate_papers)
+              setStatus("completed")
+              addLog("system", "Draft updated successfully!")
 
-            const assistantMsg: ConversationMessage = {
-              role: "assistant",
-              content: `Updated draft based on: ${message}`,
-              timestamp: new Date().toISOString(),
-              metadata: { action: "draft_updated" },
+              const assistantMsg: ConversationMessage = {
+                role: "assistant",
+                content: `Updated draft based on: ${message}`,
+                timestamp: new Date().toISOString(),
+                metadata: { action: "draft_updated" },
+              }
+              addMessage(assistantMsg)
+            } else {
+              setStatus("error")
+              setError(t('draftFailed'))
             }
-            addMessage(assistantMsg)
-          } else {
-            setStatus("error")
-            setError(t('draftFailed'))
-          }
-          sseCleanupRef.current = null
-        },
-        (error) => {
-          setError(error)
-          addLog("error", error)
-          sseCleanupRef.current = null
+            sseCleanupRef.current = null
+          },
+          onError: (error) => {
+            setError(error)
+            addLog("error", error)
+            sseCleanupRef.current = null
+          },
+          onCostUpdate: (cost) => setTotalCostUsd(cost),
         },
       )
     } catch (err) {
@@ -265,7 +275,7 @@ export default function Home() {
       setError(errMessage)
       addLog("error", errMessage)
     }
-  }, [setStatus, addLog, addMessage, setDraft, setCandidatePapers, setError, selectedModelId, getErrorMessage, t])
+  }, [setStatus, addLog, addMessage, setDraft, setCandidatePapers, setError, selectedModelId, setTotalCostUsd, getErrorMessage, t])
 
   const handleRetry = useCallback(() => {
     if (lastQuery) {

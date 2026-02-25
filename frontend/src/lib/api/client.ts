@@ -136,11 +136,17 @@ export interface SSECompletedData {
   candidate_papers: Paper[]
 }
 
+export interface SSECallbacks {
+  onMessage: (node: string, log: string) => void
+  onCompleted: (data: SSECompletedData) => void
+  onError: (error: string) => void
+  onCostUpdate?: (totalCostUsd: number) => void
+  onDraftToken?: (token: string) => void
+}
+
 export function createSSEConnection(
   threadId: string,
-  onMessage: (node: string, log: string) => void,
-  onCompleted: (data: SSECompletedData) => void,
-  onError: (error: string) => void
+  callbacks: SSECallbacks
 ): () => void {
   const eventSource = new EventSource(`${API_BASE}/api/research/stream/${threadId}`)
 
@@ -149,7 +155,7 @@ export function createSSEConnection(
       const data = JSON.parse(event.data)
       
       if (data.event === "completed") {
-        onCompleted({
+        callbacks.onCompleted({
           final_draft: data.final_draft ?? null,
           candidate_papers: data.candidate_papers ?? [],
         })
@@ -158,13 +164,23 @@ export function createSSEConnection(
       }
       
       if (data.event === "error") {
-        onError(data.detail || "Unknown error")
+        callbacks.onError(data.detail || "Unknown error")
         eventSource.close()
+        return
+      }
+
+      if (data.event === "cost_update") {
+        callbacks.onCostUpdate?.(data.total_cost_usd)
+        return
+      }
+
+      if (data.event === "draft_token") {
+        callbacks.onDraftToken?.(data.token)
         return
       }
       
       if (data.node && data.log) {
-        onMessage(data.node, data.log)
+        callbacks.onMessage(data.node, data.log)
       }
     } catch {
       console.error("Failed to parse SSE message:", event.data)
@@ -172,7 +188,7 @@ export function createSSEConnection(
   }
 
   eventSource.onerror = () => {
-    onError("Connection lost")
+    callbacks.onError("Connection lost")
     eventSource.close()
   }
 

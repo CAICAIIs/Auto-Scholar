@@ -49,6 +49,7 @@ interface ResearchState {
   paperProcessingStates: Map<string, PaperProcessingState>
   processingStartTime: number | null
   isRegenerating: boolean
+  totalCostUsd: number
   
   setThreadId: (id: string | null) => void
   setStatus: (status: WorkflowStatus) => void
@@ -83,6 +84,7 @@ interface ResearchState {
   clearProcessingStates: () => void
   
   setIsRegenerating: (regenerating: boolean) => void
+  setTotalCostUsd: (cost: number) => void
   
   reset: () => void
 }
@@ -182,6 +184,7 @@ const initialState = {
   paperProcessingStates: new Map<string, PaperProcessingState>(),
   processingStartTime: null as number | null,
   isRegenerating: false,
+  totalCostUsd: 0,
 }
 
 const hydratedState = restoredState ? { ...initialState, ...restoredState } : initialState
@@ -349,6 +352,8 @@ export const useResearchStore = create<ResearchState>((set, get) => ({
   }),
 
   setIsRegenerating: (regenerating: boolean) => set({ isRegenerating: regenerating }),
+
+  setTotalCostUsd: (cost) => set({ totalCostUsd: cost }),
 
   reset: () => set(initialState),
 }))

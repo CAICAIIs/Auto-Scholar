@@ -66,6 +66,8 @@ export function ModelSelector() {
           <option key={model.id} value={model.id} className="bg-zinc-800 text-zinc-300">
             {model.display_name}
             {model.is_local ? ` [${t("modelLocal")}]` : ""}
+            {model.cost_tier ? ` · ${t(`costTier_${model.cost_tier}`)}` : ""}
+            {model.fallback_for ? ` → ${model.fallback_for}` : ""}
           </option>
         ))}
       </select>
