@@ -1,5 +1,5 @@
 from datetime import UTC, datetime
-from enum import StrEnum
+from enum import IntEnum, StrEnum
 from typing import Any
 
 from pydantic import BaseModel, Field
@@ -12,6 +12,12 @@ class ModelProvider(StrEnum):
     DEEPSEEK = "deepseek"
     OLLAMA = "ollama"
     CUSTOM = "custom"
+
+
+class CostTier(IntEnum):
+    LOW = 1
+    MEDIUM = 2
+    HIGH = 3
 
 
 class ModelConfig(BaseModel):
@@ -37,6 +43,15 @@ class ModelConfig(BaseModel):
     max_output_tokens: int = Field(default=8192, description="Maximum output tokens")
     is_local: bool = Field(default=False, description="Whether this is a local model (e.g. Ollama)")
     enabled: bool = Field(default=True, description="Whether this model is available for selection")
+
+    max_context_tokens: int = Field(default=128_000, description="Maximum context window size")
+    supports_long_context: bool = Field(default=True, description="Context window >= 32K tokens")
+    cost_tier: CostTier = Field(default=CostTier.HIGH, description="Cost classification")
+    reasoning_score: int = Field(default=7, ge=1, le=10, description="Reasoning ability (1-10)")
+    creativity_score: int = Field(
+        default=7, ge=1, le=10, description="Creative writing ability (1-10)"
+    )
+    latency_score: int = Field(default=5, ge=1, le=10, description="Speed (1=slow, 10=fast)")
 
 
 class PaperSource(StrEnum):

@@ -26,7 +26,7 @@ from tenacity import (
 
 from backend.constants import LLM_DEFAULT_MAX_TOKENS, OLLAMA_BASE_URL
 from backend.evaluation.cost_tracker import record_llm_usage
-from backend.schemas import ModelConfig, ModelProvider
+from backend.schemas import CostTier, ModelConfig, ModelProvider
 
 load_dotenv()
 
@@ -73,6 +73,42 @@ def _detect_provider_from_url(base_url: str) -> ModelProvider:
     return ModelProvider.CUSTOM
 
 
+def _infer_capabilities(provider: ModelProvider, model_name: str) -> dict[str, Any]:
+    name_lower = model_name.lower()
+
+    if provider == ModelProvider.OLLAMA:
+        return {
+            "max_context_tokens": 8_000,
+            "supports_long_context": False,
+            "cost_tier": CostTier.LOW,
+            "reasoning_score": 4,
+            "creativity_score": 4,
+            "latency_score": 8,
+        }
+
+    if provider == ModelProvider.DEEPSEEK:
+        is_reasoner = "reasoner" in name_lower or "r1" in name_lower
+        return {
+            "max_context_tokens": 64_000,
+            "supports_long_context": True,
+            "cost_tier": CostTier.LOW,
+            "reasoning_score": 9 if is_reasoner else 7,
+            "creativity_score": 6,
+            "latency_score": 7,
+        }
+
+    is_mini = "mini" in name_lower
+    is_o_series = name_lower.startswith("o1") or name_lower.startswith("o3")
+    return {
+        "max_context_tokens": 128_000,
+        "supports_long_context": True,
+        "cost_tier": CostTier.LOW if is_mini else CostTier.HIGH,
+        "reasoning_score": 9 if is_o_series else (6 if is_mini else 8),
+        "creativity_score": 5 if is_mini else 8,
+        "latency_score": 9 if is_mini else 6,
+    }
+
+
 def _build_default_registry() -> dict[str, ModelConfig]:
     registry: dict[str, ModelConfig] = {}
 
@@ -85,6 +121,7 @@ def _build_default_registry() -> dict[str, ModelConfig]:
         model_id = f"{provider.value}:{model_name}"
         is_local = provider == ModelProvider.OLLAMA
         supports_json = provider != ModelProvider.OLLAMA
+        caps = _infer_capabilities(provider, model_name)
         registry[model_id] = ModelConfig(
             id=model_id,
             provider=provider,
@@ -96,6 +133,7 @@ def _build_default_registry() -> dict[str, ModelConfig]:
             supports_structured_output=supports_json,
             max_output_tokens=LLM_DEFAULT_MAX_TOKENS,
             is_local=is_local,
+            **caps,
         )
 
     deepseek_key = os.environ.get("DEEPSEEK_API_KEY", "")
@@ -104,6 +142,7 @@ def _build_default_registry() -> dict[str, ModelConfig]:
         ds_model = os.environ.get("DEEPSEEK_MODEL", "deepseek-chat")
         ds_id = f"deepseek:{ds_model}"
         if ds_id not in registry:
+            ds_caps = _infer_capabilities(ModelProvider.DEEPSEEK, ds_model)
             registry[ds_id] = ModelConfig(
                 id=ds_id,
                 provider=ModelProvider.DEEPSEEK,
@@ -115,6 +154,7 @@ def _build_default_registry() -> dict[str, ModelConfig]:
                 supports_structured_output=True,
                 max_output_tokens=LLM_DEFAULT_MAX_TOKENS,
                 is_local=False,
+                **ds_caps,
             )
 
     ollama_models_str = os.environ.get("OLLAMA_MODELS", "")
@@ -124,6 +164,7 @@ def _build_default_registry() -> dict[str, ModelConfig]:
             if not m:
                 continue
             oid = f"ollama:{m}"
+            ollama_caps = _infer_capabilities(ModelProvider.OLLAMA, m)
             registry[oid] = ModelConfig(
                 id=oid,
                 provider=ModelProvider.OLLAMA,
@@ -135,6 +176,7 @@ def _build_default_registry() -> dict[str, ModelConfig]:
                 supports_structured_output=False,
                 max_output_tokens=4096,
                 is_local=True,
+                **ollama_caps,
             )
 
     return registry
