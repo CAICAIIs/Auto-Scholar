@@ -347,8 +347,21 @@ async def structured_completion(
     temperature: float = 0.3,
     max_tokens: int | None = None,
     model_id: str | None = None,
+    task_type: str | None = None,
 ) -> T:
-    client, model_name, supports_json_mode = resolve_model(model_id)
+    effective_model_id = model_id
+    if not effective_model_id and task_type:
+        from backend.llm.router import select_model
+        from backend.llm.task_types import TaskType
+
+        try:
+            tt = TaskType(task_type)
+            registry = get_model_registry()
+            effective_model_id = select_model(tt, registry, override_model_id=model_id)
+        except (ValueError, KeyError):
+            logger.warning("Unknown task_type=%s, using default model", task_type)
+
+    client, model_name, supports_json_mode = resolve_model(effective_model_id)
     schema_instruction = _build_schema_prompt(response_model)
 
     augmented_messages: list[dict[str, Any]] = []
