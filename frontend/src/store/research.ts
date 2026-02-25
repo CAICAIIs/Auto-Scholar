@@ -1,5 +1,5 @@
 import { create } from "zustand"
-import type { Paper, DraftOutput, PaperSource, ConversationMessage } from "@/types"
+import type { Paper, DraftOutput, PaperSource, ConversationMessage, ModelConfig } from "@/types"
 
 export type WorkflowStatus = 
   | "idle" 
@@ -42,6 +42,9 @@ interface ResearchState {
   searchSources: PaperSource[]
   messages: ConversationMessage[]
   
+  availableModels: ModelConfig[]
+  selectedModelId: string | null
+  
   processingStage: ProcessingStage | null
   paperProcessingStates: Map<string, PaperProcessingState>
   processingStartTime: number | null
@@ -69,6 +72,9 @@ interface ResearchState {
   setMessages: (messages: ConversationMessage[]) => void
   clearMessages: () => void
   
+  setAvailableModels: (models: ModelConfig[]) => void
+  setSelectedModelId: (modelId: string | null) => void
+  
   setProcessingStage: (stage: ProcessingStage | null) => void
   updatePaperProcessingState: (paperId: string, status: PaperProcessingStatus, message?: string) => void
   initProcessingStates: (paperIds: string[]) => void
@@ -92,6 +98,8 @@ const initialState = {
   outputLanguage: "en" as const,
   searchSources: ["semantic_scholar", "arxiv", "pubmed"] as PaperSource[],
   messages: [] as ConversationMessage[],
+  availableModels: [] as ModelConfig[],
+  selectedModelId: (typeof window !== "undefined" ? localStorage.getItem("auto-scholar-model") : null) as string | null,
   processingStage: null as ProcessingStage | null,
   paperProcessingStates: new Map<string, PaperProcessingState>(),
   processingStartTime: null as number | null,
@@ -179,6 +187,17 @@ export const useResearchStore = create<ResearchState>((set, get) => ({
   setMessages: (messages) => set({ messages }),
 
   clearMessages: () => set({ messages: [] }),
+
+  setAvailableModels: (models) => set({ availableModels: models }),
+
+  setSelectedModelId: (modelId) => {
+    if (modelId) {
+      localStorage.setItem("auto-scholar-model", modelId)
+    } else {
+      localStorage.removeItem("auto-scholar-model")
+    }
+    set({ selectedModelId: modelId })
+  },
 
   setProcessingStage: (stage) => set({ processingStage: stage }),
 
