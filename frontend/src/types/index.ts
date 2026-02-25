@@ -3,7 +3,7 @@ export type PaperSource = "semantic_scholar" | "arxiv" | "pubmed"
 
 export type ModelProvider = "openai" | "deepseek" | "ollama" | "custom"
 
-export type CostTier = "low" | "medium" | "high"
+export type CostTier = 1 | 2 | 3
 
 export type MessageRole = "user" | "assistant" | "system"
 

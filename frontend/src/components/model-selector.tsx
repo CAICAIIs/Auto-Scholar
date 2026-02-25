@@ -4,7 +4,13 @@ import { useEffect, useRef } from "react"
 import { useTranslations } from "next-intl"
 import { useResearchStore } from "@/store/research"
 import { fetchModels } from "@/lib/api"
-import type { ModelConfig } from "@/types"
+import type { CostTier, ModelConfig } from "@/types"
+
+const COST_TIER_KEYS: Record<CostTier, string> = {
+  1: "costTier_low",
+  2: "costTier_medium",
+  3: "costTier_high",
+}
 
 export function ModelSelector() {
   const t = useTranslations("query")
@@ -66,7 +72,7 @@ export function ModelSelector() {
           <option key={model.id} value={model.id} className="bg-zinc-800 text-zinc-300">
             {model.display_name}
             {model.is_local ? ` [${t("modelLocal")}]` : ""}
-            {model.cost_tier ? ` · ${t(`costTier_${model.cost_tier}`)}` : ""}
+            {model.cost_tier ? ` · ${t(COST_TIER_KEYS[model.cost_tier])}` : ""}
             {model.fallback_for ? ` → ${model.fallback_for}` : ""}
           </option>
         ))}
