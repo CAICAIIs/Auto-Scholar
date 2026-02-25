@@ -5,6 +5,40 @@ from typing import Any
 from pydantic import BaseModel, Field
 
 
+class ModelProvider(StrEnum):
+    """Supported LLM providers."""
+
+    OPENAI = "openai"
+    DEEPSEEK = "deepseek"
+    OLLAMA = "ollama"
+    CUSTOM = "custom"
+
+
+class ModelConfig(BaseModel):
+    """Configuration for a single LLM model."""
+
+    id: str = Field(description="Canonical model ID, e.g. 'openai:gpt-4o'")
+    provider: ModelProvider
+    model_name: str = Field(description="Provider-specific model name, e.g. 'gpt-4o'")
+    display_name: str = Field(description="Human-readable name for UI")
+    api_base: str = Field(description="API base URL for this provider")
+    api_key_env: str = Field(
+        default="LLM_API_KEY",
+        description="Environment variable name for the API key",
+    )
+    supports_json_mode: bool = Field(
+        default=True,
+        description="Whether the model supports response_format={'type': 'json_object'}",
+    )
+    supports_structured_output: bool = Field(
+        default=True,
+        description="Whether the model reliably produces structured JSON",
+    )
+    max_output_tokens: int = Field(default=8192, description="Maximum output tokens")
+    is_local: bool = Field(default=False, description="Whether this is a local model (e.g. Ollama)")
+    enabled: bool = Field(default=True, description="Whether this model is available for selection")
+
+
 class PaperSource(StrEnum):
     SEMANTIC_SCHOLAR = "semantic_scholar"
     ARXIV = "arxiv"
@@ -311,6 +345,7 @@ class StartRequest(BaseModel):
         PaperSource.ARXIV,
         PaperSource.PUBMED,
     ]
+    model_id: str | None = None
 
 
 class StartResponse(BaseModel):
@@ -334,6 +369,7 @@ class ApproveResponse(BaseModel):
 class ContinueRequest(BaseModel):
     thread_id: str
     message: str
+    model_id: str | None = None
 
 
 class ContinueResponse(BaseModel):
