@@ -24,8 +24,9 @@ from tenacity import (
     wait_random_exponential,
 )
 
-from backend.constants import LLM_DEFAULT_MAX_TOKENS
+from backend.constants import LLM_DEFAULT_MAX_TOKENS, OLLAMA_BASE_URL
 from backend.evaluation.cost_tracker import record_llm_usage
+from backend.schemas import ModelConfig, ModelProvider
 
 load_dotenv()
 
@@ -33,27 +34,155 @@ logger = logging.getLogger(__name__)
 
 T = TypeVar("T", bound=BaseModel)
 
-_client: AsyncOpenAI | None = None
-
 LLM_TIMEOUT = httpx.Timeout(connect=60.0, read=120.0, write=60.0, pool=60.0)
+
+_client_cache: dict[tuple[str, str], AsyncOpenAI] = {}
+
+
+def _get_or_create_client(api_key: str, base_url: str) -> AsyncOpenAI:
+    cache_key = (base_url, api_key)
+    if cache_key not in _client_cache:
+        _client_cache[cache_key] = AsyncOpenAI(
+            api_key=api_key,
+            base_url=base_url,
+            timeout=LLM_TIMEOUT,
+        )
+    return _client_cache[cache_key]
 
 
 def get_client() -> AsyncOpenAI:
-    global _client
-    if _client is None:
-        api_key = os.environ.get("LLM_API_KEY")
-        if not api_key:
-            raise RuntimeError("LLM_API_KEY environment variable is required")
-        _client = AsyncOpenAI(
-            api_key=api_key,
-            base_url=os.environ.get("LLM_BASE_URL", "https://api.openai.com/v1"),
-            timeout=LLM_TIMEOUT,
-        )
-    return _client
+    api_key = os.environ.get("LLM_API_KEY")
+    if not api_key:
+        raise RuntimeError("LLM_API_KEY environment variable is required")
+    base_url = os.environ.get("LLM_BASE_URL", "https://api.openai.com/v1")
+    return _get_or_create_client(api_key, base_url)
 
 
 def get_model() -> str:
     return os.environ.get("LLM_MODEL", "gpt-4o")
+
+
+def _detect_provider_from_url(base_url: str) -> ModelProvider:
+    url_lower = base_url.lower()
+    if "openai.com" in url_lower:
+        return ModelProvider.OPENAI
+    if "deepseek.com" in url_lower:
+        return ModelProvider.DEEPSEEK
+    if "localhost" in url_lower or "127.0.0.1" in url_lower or "11434" in url_lower:
+        return ModelProvider.OLLAMA
+    return ModelProvider.CUSTOM
+
+
+def _build_default_registry() -> dict[str, ModelConfig]:
+    registry: dict[str, ModelConfig] = {}
+
+    api_key = os.environ.get("LLM_API_KEY", "")
+    base_url = os.environ.get("LLM_BASE_URL", "https://api.openai.com/v1")
+    model_name = os.environ.get("LLM_MODEL", "gpt-4o")
+
+    if api_key:
+        provider = _detect_provider_from_url(base_url)
+        model_id = f"{provider.value}:{model_name}"
+        is_local = provider == ModelProvider.OLLAMA
+        supports_json = provider != ModelProvider.OLLAMA
+        registry[model_id] = ModelConfig(
+            id=model_id,
+            provider=provider,
+            model_name=model_name,
+            display_name=f"{model_name} ({provider.value})",
+            api_base=base_url,
+            api_key_env="LLM_API_KEY",
+            supports_json_mode=supports_json,
+            supports_structured_output=supports_json,
+            max_output_tokens=LLM_DEFAULT_MAX_TOKENS,
+            is_local=is_local,
+        )
+
+    deepseek_key = os.environ.get("DEEPSEEK_API_KEY", "")
+    if deepseek_key:
+        ds_base = os.environ.get("DEEPSEEK_BASE_URL", "https://api.deepseek.com/v1")
+        ds_model = os.environ.get("DEEPSEEK_MODEL", "deepseek-chat")
+        ds_id = f"deepseek:{ds_model}"
+        if ds_id not in registry:
+            registry[ds_id] = ModelConfig(
+                id=ds_id,
+                provider=ModelProvider.DEEPSEEK,
+                model_name=ds_model,
+                display_name=f"{ds_model} (DeepSeek)",
+                api_base=ds_base,
+                api_key_env="DEEPSEEK_API_KEY",
+                supports_json_mode=True,
+                supports_structured_output=True,
+                max_output_tokens=LLM_DEFAULT_MAX_TOKENS,
+                is_local=False,
+            )
+
+    ollama_models_str = os.environ.get("OLLAMA_MODELS", "")
+    if ollama_models_str:
+        for m in ollama_models_str.split(","):
+            m = m.strip()
+            if not m:
+                continue
+            oid = f"ollama:{m}"
+            registry[oid] = ModelConfig(
+                id=oid,
+                provider=ModelProvider.OLLAMA,
+                model_name=m,
+                display_name=f"{m} (Ollama, local)",
+                api_base=OLLAMA_BASE_URL,
+                api_key_env="",
+                supports_json_mode=False,
+                supports_structured_output=False,
+                max_output_tokens=4096,
+                is_local=True,
+            )
+
+    return registry
+
+
+_model_registry: dict[str, ModelConfig] | None = None
+
+
+def get_model_registry() -> dict[str, ModelConfig]:
+    global _model_registry
+    if _model_registry is None:
+        custom_json = os.environ.get("MODEL_REGISTRY", "")
+        if custom_json.strip():
+            try:
+                raw_list = json.loads(custom_json)
+                _model_registry = {}
+                for item in raw_list:
+                    cfg = ModelConfig.model_validate(item)
+                    _model_registry[cfg.id] = cfg
+            except (json.JSONDecodeError, ValidationError) as e:
+                logger.warning("MODEL_REGISTRY env var invalid (%s), using auto-detected", e)
+                _model_registry = _build_default_registry()
+        else:
+            _model_registry = _build_default_registry()
+    return _model_registry
+
+
+def list_models() -> list[ModelConfig]:
+    return [m for m in get_model_registry().values() if m.enabled]
+
+
+def resolve_model(model_id: str | None = None) -> tuple[AsyncOpenAI, str, bool]:
+    registry = get_model_registry()
+
+    if model_id and model_id in registry:
+        cfg = registry[model_id]
+        api_key = os.environ.get(cfg.api_key_env, "") if cfg.api_key_env else "ollama"
+        if not api_key and cfg.provider != ModelProvider.OLLAMA:
+            logger.warning(
+                "No API key for model %s (env: %s), falling back to default",
+                model_id,
+                cfg.api_key_env,
+            )
+        else:
+            client = _get_or_create_client(api_key or "ollama", cfg.api_base)
+            return client, cfg.model_name, cfg.supports_json_mode
+
+    return get_client(), get_model(), True
 
 
 def _build_schema_prompt(response_model: type[BaseModel]) -> str:
@@ -130,19 +259,26 @@ async def _call_llm(
     augmented_messages: list[dict[str, Any]],
     temperature: float,
     max_tokens: int | None,
+    model_name: str | None = None,
+    use_json_mode: bool = True,
 ) -> str:
-    model = get_model()
+    effective_model = model_name or get_model()
     effective_max_tokens = max_tokens or LLM_DEFAULT_MAX_TOKENS
-    logger.info("LLM request starting (model=%s, max_tokens=%s)", model, effective_max_tokens)
+    logger.info(
+        "LLM request starting (model=%s, max_tokens=%s)", effective_model, effective_max_tokens
+    )
     start_time = time.perf_counter()
     try:
-        completion = await client.chat.completions.create(  # type: ignore[call-overload,arg-type]
-            model=model,
-            messages=augmented_messages,
-            response_format={"type": "json_object"},
-            temperature=temperature,
-            max_tokens=effective_max_tokens,
-        )
+        kwargs: dict[str, Any] = {
+            "model": effective_model,
+            "messages": augmented_messages,
+            "temperature": temperature,
+            "max_tokens": effective_max_tokens,
+        }
+        if use_json_mode:
+            kwargs["response_format"] = {"type": "json_object"}
+
+        completion = await client.chat.completions.create(**kwargs)  # type: ignore[call-overload]
         elapsed = time.perf_counter() - start_time
         logger.info("LLM request completed in %.2fs", elapsed)
 
@@ -150,7 +286,7 @@ async def _call_llm(
             record_llm_usage(
                 prompt_tokens=completion.usage.prompt_tokens,
                 completion_tokens=completion.usage.completion_tokens,
-                model=model,
+                model=effective_model,
             )
 
         raw_content = completion.choices[0].message.content
@@ -168,8 +304,9 @@ async def structured_completion(
     response_model: type[T],
     temperature: float = 0.3,
     max_tokens: int | None = None,
+    model_id: str | None = None,
 ) -> T:
-    client = get_client()
+    client, model_name, supports_json_mode = resolve_model(model_id)
     schema_instruction = _build_schema_prompt(response_model)
 
     augmented_messages: list[dict[str, Any]] = []
@@ -184,7 +321,14 @@ async def structured_completion(
     if not any(m.get("role") == "system" for m in augmented_messages):
         augmented_messages.insert(0, {"role": "system", "content": schema_instruction})
 
-    raw_content = await _call_llm(client, augmented_messages, temperature, max_tokens)
+    raw_content = await _call_llm(
+        client,
+        augmented_messages,
+        temperature,
+        max_tokens,
+        model_name=model_name,
+        use_json_mode=supports_json_mode,
+    )
 
     try:
         parsed_json = json.loads(raw_content)
