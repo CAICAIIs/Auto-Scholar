@@ -1,0 +1,80 @@
+# Auto-Scholar Model Configuration
+#
+# Environment variable substitution: ${VAR_NAME} or ${VAR_NAME:-default_value}
+# If the env var is not set and no default is provided, the value becomes "".
+#
+# Each model entry maps to backend.schemas.ModelConfig.
+# Invalid entries are skipped with a warning (other models still load).
+
+models:
+  # --- OpenAI ---
+  - id: "openai:gpt-4o"
+    provider: "openai"
+    model_name: "gpt-4o"
+    display_name: "GPT-4o (OpenAI)"
+    api_base: "${LLM_BASE_URL:-https://api.openai.com/v1}"
+    api_key_env: "LLM_API_KEY"
+    supports_json_mode: true
+    supports_structured_output: true
+    max_output_tokens: 8192
+    is_local: false
+    max_context_tokens: 128000
+    supports_long_context: true
+    cost_tier: 3          # HIGH
+    reasoning_score: 8
+    creativity_score: 8
+    latency_score: 6
+
+  - id: "openai:gpt-4o-mini"
+    provider: "openai"
+    model_name: "gpt-4o-mini"
+    display_name: "GPT-4o Mini (OpenAI)"
+    api_base: "${LLM_BASE_URL:-https://api.openai.com/v1}"
+    api_key_env: "LLM_API_KEY"
+    supports_json_mode: true
+    supports_structured_output: true
+    max_output_tokens: 8192
+    is_local: false
+    max_context_tokens: 128000
+    supports_long_context: true
+    cost_tier: 1          # LOW
+    reasoning_score: 6
+    creativity_score: 5
+    latency_score: 9
+
+  # --- DeepSeek ---
+  - id: "deepseek:deepseek-chat"
+    provider: "deepseek"
+    model_name: "deepseek-chat"
+    display_name: "DeepSeek Chat"
+    api_base: "${DEEPSEEK_BASE_URL:-https://api.deepseek.com/v1}"
+    api_key_env: "DEEPSEEK_API_KEY"
+    supports_json_mode: true
+    supports_structured_output: true
+    max_output_tokens: 8192
+    is_local: false
+    max_context_tokens: 64000
+    supports_long_context: true
+    cost_tier: 1          # LOW
+    reasoning_score: 7
+    creativity_score: 6
+    latency_score: 7
+
+  # --- Ollama (local) ---
+  # Uncomment and adjust for your local models:
+  # - id: "ollama:llama3.1:8b"
+  #   provider: "ollama"
+  #   model_name: "llama3.1:8b"
+  #   display_name: "Llama 3.1 8B (Ollama, local)"
+  #   api_base: "${OLLAMA_BASE_URL:-http://localhost:11434/v1}"
+  #   api_key_env: ""
+  #   supports_json_mode: false
+  #   supports_structured_output: false
+  #   max_output_tokens: 4096
+  #   is_local: true
+  #   max_context_tokens: 8000
+  #   supports_long_context: false
+  #   cost_tier: 1        # LOW
+  #   reasoning_score: 4
+  #   creativity_score: 4
+  #   latency_score: 8

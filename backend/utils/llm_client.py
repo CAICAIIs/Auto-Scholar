@@ -188,6 +188,15 @@ _model_registry: dict[str, ModelConfig] | None = None
 def get_model_registry() -> dict[str, ModelConfig]:
     global _model_registry
     if _model_registry is None:
+        from backend.config.loader import load_model_config
+
+        config_path = os.environ.get("MODEL_CONFIG_PATH", "")
+        if config_path:
+            yaml_registry = load_model_config(config_path)
+            if yaml_registry:
+                _model_registry = yaml_registry
+                return _model_registry
+
         custom_json = os.environ.get("MODEL_REGISTRY", "")
         if custom_json.strip():
             try:

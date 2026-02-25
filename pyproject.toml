@@ -22,6 +22,7 @@ dependencies = [
     "markdown>=3.5.0,<4.0.0",
     "matplotlib>=3.8.0,<4.0.0",
     "json-repair>=0.30.0,<1.0.0",
+    "pyyaml>=6.0,<7.0",
 ]
 
 [project.optional-dependencies]

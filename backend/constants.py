@@ -211,3 +211,8 @@ OLLAMA_API_KEY = "ollama"
 
 MODEL_REGISTRY_JSON = os.getenv("MODEL_REGISTRY", "")
 # Optional JSON string defining available models. If empty, auto-detected from env vars.
+
+MODEL_CONFIG_PATH = os.getenv("MODEL_CONFIG_PATH", "")
+# Path to YAML model configuration file. If set and file exists, takes priority
+# over MODEL_REGISTRY JSON and auto-detected env vars.
+# Example: MODEL_CONFIG_PATH=config/models.yaml
