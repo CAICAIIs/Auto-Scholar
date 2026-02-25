@@ -116,10 +116,24 @@ After approval, the system will:
 2. Generate a structured literature review with proper citations
 3. Validate all citations (auto-retry if issues found)
 
-### Language Options
+### Agent Console
 
-- **UI Language**: Click the language button (中文/English) to switch interface language
-- **Output Language**: Click EN/中 button to choose review generation language
+The agent console shows real-time progress with live streaming logs:
+
+- **Console Title**: "控制台" (Chinese) or "Console" (English)
+- **Collapse/Expand**: Click the collapse button to minimize the console to a sidebar
+- **Model Selection**: Choose the LLM model for generation (default: gpt-4o)
+- **Language Controls**: Unified interface for language switching:
+  - **界面**: Toggle between [中|EN] to switch UI language
+  - **综述**: Toggle between [中|EN] to choose review generation language
+
+**State Preservation:**
+- Switching UI locale preserves all session data (threadId, draft, messages, logs)
+- Uses sessionStorage to maintain state across page reloads
+
+**Auto-Regeneration:**
+- When changing the output language, the review automatically regenerates in the new language
+- State is preserved during regeneration with duplicate-request prevention
 
 ## Tech Stack
 
@@ -201,7 +215,7 @@ The following environment variables allow performance tuning for users with high
 - Raw messages: 263 tokens
 - After debounce: 21 network requests
 - Compression ratio: 12.5x
-- Mechanism: 200ms time window + semantic boundary detection (。！？.!?\n)
+- Mechanism: 200ms time window + semantic boundary detection (。！？.!?) + newline
 
 ## Testing
 
