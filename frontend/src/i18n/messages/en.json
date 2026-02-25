@@ -1,6 +1,9 @@
 {
   "console": {
-    "title": "Agent Console",
+    "title": "Console",
+    "collapse": "Collapse console",
+    "expand": "Expand console",
+    "regenerating": "Regenerating review in {lang}...",
     "outputLanguageEnglish": "Output Language: English",
     "outputLanguageChinese": "Output Language: Chinese",
     "history": "History",
@@ -112,7 +115,13 @@
     "cancel": "Cancel"
   },
   "language": {
-    "switch": "中文"
+    "switch": "中文",
+    "uiLabel": "UI",
+    "outputLabel": "Review",
+    "uiLanguage": "Interface Language",
+    "outputLanguage": "Review Language",
+    "en": "EN",
+    "zh": "中"
   },
   "errors": {
     "networkError": "Network error. Please check your connection and try again.",

@@ -84,6 +84,75 @@ interface ResearchState {
   reset: () => void
 }
 
+const SESSION_STORAGE_KEY = "auto-scholar-state"
+
+interface PersistedState {
+  threadId: string | null
+  status: WorkflowStatus
+  candidatePapers: Paper[]
+  selectedPaperIds: string[]
+  approvedPapers: Paper[]
+  draft: DraftOutput | null
+  editedDraft: DraftOutput | null
+  isEditing: boolean
+  error: string | null
+  outputLanguage: "en" | "zh"
+  searchSources: PaperSource[]
+  messages: ConversationMessage[]
+  logs: Array<{ timestamp: string; node: string; message: string }>
+}
+
+function persistState(state: ResearchState): void {
+  try {
+    const data: PersistedState = {
+      threadId: state.threadId,
+      status: state.status,
+      candidatePapers: state.candidatePapers,
+      selectedPaperIds: Array.from(state.selectedPaperIds),
+      approvedPapers: state.approvedPapers,
+      draft: state.draft,
+      editedDraft: state.editedDraft,
+      isEditing: state.isEditing,
+      error: state.error,
+      outputLanguage: state.outputLanguage,
+      searchSources: state.searchSources,
+      messages: state.messages,
+      logs: state.logs.map((l) => ({ timestamp: l.timestamp.toISOString(), node: l.node, message: l.message })),
+    }
+    sessionStorage.setItem(SESSION_STORAGE_KEY, JSON.stringify(data))
+  } catch {
+    // empty — sessionStorage may be unavailable
+  }
+}
+
+function restoreState(): Partial<Pick<ResearchState, 'threadId' | 'status' | 'candidatePapers' | 'selectedPaperIds' | 'approvedPapers' | 'draft' | 'editedDraft' | 'isEditing' | 'error' | 'outputLanguage' | 'searchSources' | 'messages' | 'logs'>> | null {
+  try {
+    const raw = sessionStorage.getItem(SESSION_STORAGE_KEY)
+    sessionStorage.removeItem(SESSION_STORAGE_KEY)
+    if (!raw) return null
+    const data: PersistedState = JSON.parse(raw)
+    return {
+      threadId: data.threadId,
+      status: data.status,
+      candidatePapers: data.candidatePapers,
+      selectedPaperIds: new Set(data.selectedPaperIds),
+      approvedPapers: data.approvedPapers,
+      draft: data.draft,
+      editedDraft: data.editedDraft,
+      isEditing: data.isEditing,
+      error: data.error,
+      outputLanguage: data.outputLanguage,
+      searchSources: data.searchSources,
+      messages: data.messages,
+      logs: data.logs.map((l) => ({ timestamp: new Date(l.timestamp), node: l.node, message: l.message })),
+    }
+  } catch {
+    return null
+  }
+}
+
+const restoredState = typeof window !== "undefined" ? restoreState() : null
+
 const initialState = {
   threadId: null,
   status: "idle" as WorkflowStatus,
@@ -105,8 +174,10 @@ const initialState = {
   processingStartTime: null as number | null,
 }
 
+const hydratedState = restoredState ? { ...initialState, ...restoredState } : initialState
+
 export const useResearchStore = create<ResearchState>((set, get) => ({
-  ...initialState,
+  ...hydratedState,
 
   setThreadId: (id) => set({ threadId: id }),
 
@@ -269,3 +340,7 @@ export const useResearchStore = create<ResearchState>((set, get) => ({
 
   reset: () => set(initialState),
 }))
+
+export function persistStoreState(): void {
+  persistState(useResearchStore.getState())
+}

@@ -1,6 +1,9 @@
 {
   "console": {
-    "title": "智能助手控制台",
+    "title": "控制台",
+    "collapse": "收起控制台",
+    "expand": "展开控制台",
+    "regenerating": "正在以{lang}重新生成综述...",
     "outputLanguageEnglish": "输出语言：英文",
     "outputLanguageChinese": "输出语言：中文",
     "history": "历史记录",
@@ -112,7 +115,13 @@
     "cancel": "取消"
   },
   "language": {
-    "switch": "English"
+    "switch": "English",
+    "uiLabel": "界面",
+    "outputLabel": "综述",
+    "uiLanguage": "界面语言",
+    "outputLanguage": "综述语言",
+    "en": "EN",
+    "zh": "中"
   },
   "errors": {
     "networkError": "网络错误，请检查网络连接后重试。",

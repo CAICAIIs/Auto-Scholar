@@ -11,8 +11,10 @@ import type { ConversationMessage } from "@/types"
 
 export default function Home() {
   const t = useTranslations('errors')
+  const tConsole = useTranslations('console')
   const [showApprovalModal, setShowApprovalModal] = useState(false)
   const [lastQuery, setLastQuery] = useState<string | null>(null)
+  const [consoleCollapsed, setConsoleCollapsed] = useState(false)
   const sseCleanupRef = useRef<(() => void) | null>(null)
 
   const setThreadId = useResearchStore((s) => s.setThreadId)
@@ -31,6 +33,10 @@ export default function Home() {
   const clearMessages = useResearchStore((s) => s.clearMessages)
   const startProcessingSimulation = useResearchStore((s) => s.startProcessingSimulation)
   const clearProcessingStates = useResearchStore((s) => s.clearProcessingStates)
+  const draft = useResearchStore((s) => s.draft)
+  const status = useResearchStore((s) => s.status)
+
+  const prevOutputLanguageRef = useRef(outputLanguage)
 
   useEffect(() => {
     const cleanup = sseCleanupRef.current
@@ -56,6 +62,52 @@ export default function Home() {
     }
     return t('unknownError')
   }, [t])
+
+  useEffect(() => {
+    const prev = prevOutputLanguageRef.current
+    prevOutputLanguageRef.current = outputLanguage
+    if (prev === outputLanguage) return
+
+    const threadId = useResearchStore.getState().threadId
+    if (!threadId || !draft || status !== "completed") return
+
+    const langLabel = outputLanguage === 'en' ? 'English' : '中文'
+    const regenerateMsg = `Please regenerate the entire literature review in ${outputLanguage === 'en' ? 'English' : 'Chinese'}. Keep the same structure and citations.`
+
+    setStatus("continuing")
+    addLog("system", tConsole('regenerating', { lang: langLabel }))
+
+    continueResearch(threadId, regenerateMsg, selectedModelId ?? undefined)
+      .then(() => {
+        if (sseCleanupRef.current) sseCleanupRef.current()
+        sseCleanupRef.current = createSSEConnection(
+          threadId,
+          (node, log) => addLog(node, log),
+          (data) => {
+            if (data.final_draft) {
+              setDraft(data.final_draft)
+              setCandidatePapers(data.candidate_papers)
+              setStatus("completed")
+              addLog("system", "Draft updated successfully!")
+            } else {
+              setStatus("error")
+              setError(t('draftFailed'))
+            }
+            sseCleanupRef.current = null
+          },
+          (error) => {
+            setError(error)
+            addLog("error", error)
+            sseCleanupRef.current = null
+          },
+        )
+      })
+      .catch((err: unknown) => {
+        const errMessage = getErrorMessage(err)
+        setError(errMessage)
+        addLog("error", errMessage)
+      })
+  }, [outputLanguage, draft, status, setStatus, addLog, setDraft, setCandidatePapers, setError, selectedModelId, getErrorMessage, t, tConsole])
 
   const handleStartResearch = useCallback(async (query: string) => {
     reset()
@@ -228,14 +280,16 @@ export default function Home() {
 
   return (
     <div className="flex h-screen">
-      <div className="w-[30%] min-w-[300px] max-w-[400px]">
+      <div className={consoleCollapsed ? "w-10 shrink-0" : "w-[30%] min-w-[300px] max-w-[400px]"}>
         <AgentConsole 
           onStartResearch={handleStartResearch} 
           onContinueResearch={handleContinueResearch}
           onNewTopic={handleNewTopic}
+          collapsed={consoleCollapsed}
+          onToggleCollapse={() => setConsoleCollapsed((c) => !c)}
         />
       </div>
-      <div className="flex-1">
+      <div className="flex-1 min-w-0">
         <Workspace onRetry={lastQuery ? handleRetry : undefined} />
       </div>
       <ApprovalModal 
