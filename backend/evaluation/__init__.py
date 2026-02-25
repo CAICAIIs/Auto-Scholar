@@ -9,6 +9,7 @@ from backend.evaluation.schemas import (
     HumanRating,
     HumanRatingSummary,
     SectionCompletenessResult,
+    TaskCostBreakdown,
 )
 
 __all__ = [
@@ -17,6 +18,7 @@ __all__ = [
     "SectionCompletenessResult",
     "AcademicStyleResult",
     "CostEfficiencyResult",
+    "TaskCostBreakdown",
     "HumanRating",
     "HumanRatingSummary",
     "EvaluationResult",

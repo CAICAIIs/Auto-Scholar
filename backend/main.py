@@ -11,6 +11,7 @@ from fastapi.responses import JSONResponse, Response, StreamingResponse
 from pydantic import BaseModel
 
 from backend.constants import WORKFLOW_TIMEOUT_SECONDS
+from backend.evaluation.cost_tracker import get_total_cost_usd
 from backend.evaluation.human_ratings import get_ratings_for_thread, save_rating
 from backend.evaluation.runner import run_evaluation
 from backend.evaluation.schemas import EvaluationResult, HumanRating
@@ -201,6 +202,16 @@ async def stream_research(thread_id: str):
                             ensure_ascii=False,
                         )
                         await event_queue.push(reflection_event + "\n")
+
+                    cost_event = json.dumps(
+                        {
+                            "event": "cost_update",
+                            "node": node_name,
+                            "total_cost_usd": get_total_cost_usd(),
+                        },
+                        ensure_ascii=False,
+                    )
+                    await event_queue.push(cost_event + "\n")
 
             final_state = await graph.aget_state(config)
             values = final_state.values or {}

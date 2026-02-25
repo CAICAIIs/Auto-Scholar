@@ -85,15 +85,28 @@ class AcademicStyleResult(BaseModel):
         return (self.citation_count / self.total_words) * 100
 
 
-class CostEfficiencyResult(BaseModel):
-    """Cost efficiency: tokens, API calls, latency tracking."""
+class TaskCostBreakdown(BaseModel):
+    task_type: str
+    prompt_tokens: int = Field(ge=0, default=0)
+    completion_tokens: int = Field(ge=0, default=0)
+    llm_calls: int = Field(ge=0, default=0)
+    cost_usd: float = Field(ge=0, default=0.0)
 
+    @computed_field  # type: ignore[prop-decorator]
+    @property
+    def total_tokens(self) -> int:
+        return self.prompt_tokens + self.completion_tokens
+
+
+class CostEfficiencyResult(BaseModel):
     prompt_tokens: int = Field(ge=0)
     completion_tokens: int = Field(ge=0)
     total_llm_calls: int = Field(ge=0)
     total_search_calls: int = Field(ge=0)
     total_latency_ms: float = Field(ge=0)
     node_timings: dict[str, float] = Field(default_factory=dict)
+    total_cost_usd: float = Field(ge=0, default=0.0)
+    task_breakdown: list[TaskCostBreakdown] = Field(default_factory=list)
 
     @computed_field  # type: ignore[prop-decorator]
     @property

@@ -312,6 +312,7 @@ async def _call_llm(
     max_tokens: int | None,
     model_name: str | None = None,
     use_json_mode: bool = True,
+    task_type: str = "",
 ) -> str:
     effective_model = model_name or get_model()
     effective_max_tokens = max_tokens or LLM_DEFAULT_MAX_TOKENS
@@ -338,6 +339,7 @@ async def _call_llm(
                 prompt_tokens=completion.usage.prompt_tokens,
                 completion_tokens=completion.usage.completion_tokens,
                 model=effective_model,
+                task_type=task_type,
             )
 
         raw_content = completion.choices[0].message.content
@@ -392,6 +394,7 @@ async def structured_completion(
         max_tokens,
         model_name=model_name,
         use_json_mode=supports_json_mode,
+        task_type=task_type or "",
     )
 
     try:
