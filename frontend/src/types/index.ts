@@ -1,7 +1,23 @@
 // Paper metadata from backend
 export type PaperSource = "semantic_scholar" | "arxiv" | "pubmed"
 
+export type ModelProvider = "openai" | "deepseek" | "ollama" | "custom"
+
 export type MessageRole = "user" | "assistant" | "system"
+
+export interface ModelConfig {
+  id: string
+  provider: ModelProvider
+  model_name: string
+  display_name: string
+  api_base: string
+  api_key_env: string
+  supports_json_mode: boolean
+  supports_structured_output: boolean
+  max_output_tokens: number
+  is_local: boolean
+  enabled: boolean
+}
 
 export interface ConversationMessage {
   role: MessageRole
@@ -74,6 +90,7 @@ export interface StartRequest {
   query: string
   language: "en" | "zh"
   sources?: PaperSource[]
+  model_id?: string
 }
 
 export interface StartResponse {
@@ -95,6 +112,7 @@ export interface ApproveResponse {
 export interface ContinueRequest {
   thread_id: string
   message: string
+  model_id?: string
 }
 
 export interface ContinueResponse {
