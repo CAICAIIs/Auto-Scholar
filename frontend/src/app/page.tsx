@@ -35,6 +35,8 @@ export default function Home() {
   const clearProcessingStates = useResearchStore((s) => s.clearProcessingStates)
   const draft = useResearchStore((s) => s.draft)
   const status = useResearchStore((s) => s.status)
+  const isRegenerating = useResearchStore((s) => s.isRegenerating)
+  const setIsRegenerating = useResearchStore((s) => s.setIsRegenerating)
 
   const prevOutputLanguageRef = useRef(outputLanguage)
 
@@ -65,15 +67,17 @@ export default function Home() {
 
   useEffect(() => {
     const prev = prevOutputLanguageRef.current
+    if (prev === outputLanguage || isRegenerating || !draft || status !== "completed") return
+
     prevOutputLanguageRef.current = outputLanguage
-    if (prev === outputLanguage) return
 
     const threadId = useResearchStore.getState().threadId
-    if (!threadId || !draft || status !== "completed") return
+    if (!threadId) return
 
     const langLabel = outputLanguage === 'en' ? 'English' : '中文'
     const regenerateMsg = `Please regenerate the entire literature review in ${outputLanguage === 'en' ? 'English' : 'Chinese'}. Keep the same structure and citations.`
 
+    setIsRegenerating(true)
     setStatus("continuing")
     addLog("system", tConsole('regenerating', { lang: langLabel }))
 
@@ -88,9 +92,11 @@ export default function Home() {
               setDraft(data.final_draft)
               setCandidatePapers(data.candidate_papers)
               setStatus("completed")
+              setIsRegenerating(false)
               addLog("system", "Draft updated successfully!")
             } else {
               setStatus("error")
+              setIsRegenerating(false)
               setError(t('draftFailed'))
             }
             sseCleanupRef.current = null
@@ -98,6 +104,7 @@ export default function Home() {
           (error) => {
             setError(error)
             addLog("error", error)
+            setIsRegenerating(false)
             sseCleanupRef.current = null
           },
         )
@@ -106,8 +113,9 @@ export default function Home() {
         const errMessage = getErrorMessage(err)
         setError(errMessage)
         addLog("error", errMessage)
+        setIsRegenerating(false)
       })
-  }, [outputLanguage, draft, status, setStatus, addLog, setDraft, setCandidatePapers, setError, selectedModelId, getErrorMessage, t, tConsole])
+  }, [outputLanguage, draft, status, isRegenerating, setStatus, addLog, setDraft, setCandidatePapers, setError, selectedModelId, getErrorMessage, setIsRegenerating, addMessage, t, tConsole])
 
   const handleStartResearch = useCallback(async (query: string) => {
     reset()

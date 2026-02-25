@@ -48,6 +48,7 @@ interface ResearchState {
   processingStage: ProcessingStage | null
   paperProcessingStates: Map<string, PaperProcessingState>
   processingStartTime: number | null
+  isRegenerating: boolean
   
   setThreadId: (id: string | null) => void
   setStatus: (status: WorkflowStatus) => void
@@ -81,6 +82,8 @@ interface ResearchState {
   startProcessingSimulation: () => void
   clearProcessingStates: () => void
   
+  setIsRegenerating: (regenerating: boolean) => void
+  
   reset: () => void
 }
 
@@ -100,6 +103,7 @@ interface PersistedState {
   searchSources: PaperSource[]
   messages: ConversationMessage[]
   logs: Array<{ timestamp: string; node: string; message: string }>
+  isRegenerating: boolean
 }
 
 function persistState(state: ResearchState): void {
@@ -118,6 +122,7 @@ function persistState(state: ResearchState): void {
       searchSources: state.searchSources,
       messages: state.messages,
       logs: state.logs.map((l) => ({ timestamp: l.timestamp.toISOString(), node: l.node, message: l.message })),
+      isRegenerating: state.isRegenerating,
     }
     sessionStorage.setItem(SESSION_STORAGE_KEY, JSON.stringify(data))
   } catch {
@@ -125,13 +130,15 @@ function persistState(state: ResearchState): void {
   }
 }
 
-function restoreState(): Partial<Pick<ResearchState, 'threadId' | 'status' | 'candidatePapers' | 'selectedPaperIds' | 'approvedPapers' | 'draft' | 'editedDraft' | 'isEditing' | 'error' | 'outputLanguage' | 'searchSources' | 'messages' | 'logs'>> | null {
+function restoreState() {
+  type RestorableFields = Pick<ResearchState, 'threadId' | 'status' | 'candidatePapers' | 'selectedPaperIds' | 'approvedPapers' | 'draft' | 'editedDraft' | 'isEditing' | 'error' | 'outputLanguage' | 'searchSources' | 'messages' | 'logs' | 'isRegenerating'>
+
   try {
     const raw = sessionStorage.getItem(SESSION_STORAGE_KEY)
     sessionStorage.removeItem(SESSION_STORAGE_KEY)
     if (!raw) return null
     const data: PersistedState = JSON.parse(raw)
-    return {
+    const restored: Partial<RestorableFields> = {
       threadId: data.threadId,
       status: data.status,
       candidatePapers: data.candidatePapers,
@@ -145,7 +152,9 @@ function restoreState(): Partial<Pick<ResearchState, 'threadId' | 'status' | 'ca
       searchSources: data.searchSources,
       messages: data.messages,
       logs: data.logs.map((l) => ({ timestamp: new Date(l.timestamp), node: l.node, message: l.message })),
+      isRegenerating: data.isRegenerating ?? false,
     }
+    return restored
   } catch {
     return null
   }
@@ -172,6 +181,7 @@ const initialState = {
   processingStage: null as ProcessingStage | null,
   paperProcessingStates: new Map<string, PaperProcessingState>(),
   processingStartTime: null as number | null,
+  isRegenerating: false,
 }
 
 const hydratedState = restoredState ? { ...initialState, ...restoredState } : initialState
@@ -337,6 +347,8 @@ export const useResearchStore = create<ResearchState>((set, get) => ({
     processingStage: null,
     processingStartTime: null,
   }),
+
+  setIsRegenerating: (regenerating: boolean) => set({ isRegenerating: regenerating }),
 
   reset: () => set(initialState),
 }))
