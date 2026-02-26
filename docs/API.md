@@ -13,6 +13,7 @@ Request body:
 - `query` (string, required)
 - `language` (string, optional, default `en`)
 - `sources` (array, optional): `semantic_scholar | arxiv | pubmed`
+- `model_id` (string, optional): Model to use (e.g., `openai:gpt-4o`)
 
 Response:
 
@@ -27,6 +28,8 @@ Stream workflow logs via SSE.
 Event payloads include:
 
 - `{ "node": "planner_agent", "log": "..." }`
+- `{ "event": "cost_update", "node": "extraction", "total_cost_usd": 0.045 }`
+- `{ "event": "draft_token", "token": "..." }`
 - `{ "event": "done" }`
 - `{ "event": "error", "detail": "..." }`
 
@@ -54,6 +57,7 @@ Request body:
 
 - `thread_id` (string)
 - `message` (string)
+- `model_id` (string, optional): Model to use (e.g., `openai:gpt-4o`)
 
 Response:
 
@@ -123,6 +127,14 @@ Get full session detail, including:
 - final draft
 - logs
 - conversation messages
+
+## Model Management
+
+### GET /api/models
+
+List all enabled model configurations.
+
+Response: array of `ModelConfig` objects with `id`, `provider`, `display_name`, `cost_tier`, `is_local`, etc.
 
 ## Evaluation and Ratings
 

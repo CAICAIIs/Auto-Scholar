@@ -6,7 +6,7 @@ Auto-Scholar is a full-stack system for generating structured literature reviews
 
 - Backend: FastAPI + LangGraph + SQLite checkpoint persistence
 - Frontend: Next.js 16 + React 19 + Zustand + next-intl
-- Main flow: `plan -> retrieve -> approve(interrupt) -> extract -> write -> QA`
+- Main flow: `plan -> retrieve -> approve(interrupt) -> extract -> write -> QA -> reflection(conditional)`
 
 ## High-Level Components
 
@@ -14,12 +14,13 @@ Auto-Scholar is a full-stack system for generating structured literature reviews
 
 - `backend/main.py`: FastAPI app lifecycle, REST routes, SSE streaming, export/session APIs
 - `backend/workflow.py`: LangGraph construction, retry router, interrupt configuration
-- `backend/nodes.py`: 5 core agents
-  - `planner_agent`: query decomposition and keyword generation
-  - `retriever_agent`: multi-source academic search with deduplication
+- `backend/nodes.py`: 6 core agents
+  - `planner_agent`: query decomposition (CoT for complex queries) and keyword generation
+  - `retriever_agent`: multi-source academic search with plan-aware routing and deduplication
   - `extractor_agent`: contribution extraction and structured fields
-  - `writer_agent`: outline + section drafting
-  - `critic_agent`: citation QA and retry trigger
+  - `writer_agent`: outline + parallel section drafting
+  - `critic_agent`: citation QA and error detection
+  - `reflection_agent`: structured error classification and retry routing
 - `backend/state.py`: `AgentState` TypedDict with append reducers (`logs`, `messages`, `agent_handoffs`)
 - `backend/schemas.py`: Pydantic v2 contracts for APIs and internal models
 - `backend/utils/`
@@ -80,10 +81,11 @@ Auto-Scholar is a full-stack system for generating structured literature reviews
 ## Human-in-the-Loop and QA Retry
 
 - Graph compile option `interrupt_before=["extractor_agent"]` enforces explicit user approval before extraction.
-- `critic_agent` writes `qa_errors`; router behavior:
+- `critic_agent` writes `qa_errors`; routing goes through `reflection_agent`:
   - no errors -> end
-  - errors and `retry_count < 3` -> back to `writer_agent`
-  - retries exhausted -> end with latest draft
+  - errors -> `reflection_agent` classifies errors (5 categories) and decides retry target
+  - reflection routes to `writer_agent` (fixable errors) or `retriever_agent` (needs more papers)
+  - `retry_count >= 3` -> end with latest draft regardless
 
 ## Persistence Model
 

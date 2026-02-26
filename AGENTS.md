@@ -86,7 +86,7 @@ auto-scholar/
 │       ├── i18n/          # Internationalization (en/zh) via next-intl
 │       ├── types/         # TypeScript types mirroring backend schemas 1:1
 │       └── __tests__/     # Vitest unit tests
-├── tests/                 # Backend pytest tests (34 files, ~4300 lines)
+├── tests/                 # Backend pytest tests (34 files, ~7900 lines)
 ├── .github/workflows/ci.yml  # 3 parallel jobs: lint, test (matrix 3.11/3.12), frontend
 └── pyproject.toml         # Python >=3.11, pytest asyncio_mode=auto
 ```

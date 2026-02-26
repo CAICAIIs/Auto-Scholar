@@ -4,7 +4,7 @@
 
 ## Overview
 
-Automated + human evaluation of generated reviews. Called via `POST /api/research/evaluate` and `runner.run_evaluation()`.
+Automated + human evaluation of generated reviews. Called via `GET /api/research/evaluate/{thread_id}` and `runner.run_evaluation()`.
 
 ## Dimensions
 
@@ -22,13 +22,13 @@ Automated + human evaluation of generated reviews. Called via `POST /api/researc
 
 | File | Lines | Role |
 |------|-------|------|
-| `schemas.py` | 201 | All evaluation Pydantic models with `@computed_field` properties |
-| `cost_tracker.py` | 163 | Module-level lists for usage/timing/search records. Pricing table for OpenAI + DeepSeek |
-| `runner.py` | 77 | Orchestrates all dimensions, merges log-parsed + runtime-tracked cost data |
-| `citation_metrics.py` | ~60 | Regex-based citation extraction (`{cite:N}` and `[N]` formats) |
-| `academic_style.py` | ~70 | Sentence splitting, hedging/passive counting, bilingual (en/zh) |
+| `schemas.py` | ~200 | All evaluation Pydantic models with `@computed_field` properties |
+| `cost_tracker.py` | ~163 | Module-level lists for usage/timing/search records. Pricing table for OpenAI + DeepSeek |
+| `runner.py` | ~76 | Orchestrates all dimensions, merges log-parsed + runtime-tracked cost data |
+| `citation_metrics.py` | ~66 | Regex-based citation extraction (`{cite:N}` and `[N]` formats) |
+| `academic_style.py` | ~71 | Sentence splitting, hedging/passive counting, bilingual (en/zh) |
 | `section_completeness.py` | ~60 | Heading normalization + alias matching from `constants.py` |
-| `human_ratings.py` | ~60 | JSON file storage in `data/ratings.json` |
+| `human_ratings.py` | ~59 | JSON file storage in `data/ratings.json` |
 
 ## Conventions
 

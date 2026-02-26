@@ -45,6 +45,9 @@ test_checkpoints_*.db-wal
 test_conversation_*.db
 test_conversation_*.db-shm
 test_conversation_*.db-wal
+test_phase1_mock_*.db
+test_phase1_mock_*.db-shm
+test_phase1_mock_*.db-wal
 checkpoints.db
 checkpoints.db-shm
 checkpoints.db-wal
