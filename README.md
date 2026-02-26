@@ -16,6 +16,10 @@ Auto-Scholar helps researchers quickly generate structured literature reviews. E
 
 **Key Features:**
 - **Smart Paper Search**: Automatically generates search keywords and finds relevant papers from Semantic Scholar, arXiv, and PubMed
+- **AI Runtime Layer**: Task-aware model routing automatically selects the optimal model for each task, with multi-layer fallback support
+- **Multi-Model Support**: Supports OpenAI, DeepSeek, Ollama (local), and other LLM providers
+- **YAML Model Configuration**: Flexibly configure model capability scores and cost tiers via `config/models.yaml`
+- **Real-Time Cost Tracking**: Break down LLM usage costs by task type with USD real-time display
 - **Human-in-the-Loop**: Review and approve papers before they're included in your review
 - **Anti-Hallucination QA**: Validates all citations exist and are properly referenced
 - **Bilingual Support**: Generate reviews in English or Chinese, with UI in both languages
@@ -73,6 +77,31 @@ CLAIM_VERIFICATION_CONCURRENCY=2
 # Default: true (maintains 97.3% citation accuracy)
 # Set to "false" to disable and reduce workflow time
 CLAIM_VERIFICATION_ENABLED=true
+
+# === AI Runtime Layer Configuration ===
+
+# Optional - Path to YAML model configuration file
+# If set, takes priority over MODEL_REGISTRY and auto-detection
+# Default: "" (auto-detect from environment variables)
+MODEL_CONFIG_PATH=config/models.yaml
+
+# Optional - JSON string defining available models (alternative to YAML)
+# Example: MODEL_REGISTRY=[{"id":"openai:gpt-4o","provider":"openai",...}]
+# Default: "" (auto-detect from environment variables)
+MODEL_REGISTRY=
+
+# Optional - Default model ID for per-request routing
+# Format: "provider:model_name" (e.g., "openai:gpt-4o", "deepseek:deepseek-chat")
+# If empty, uses legacy LLM_BASE_URL + LLM_MODEL as default
+LLM_MODEL_ID=
+
+# Optional - DeepSeek API configuration (auto-detected if set)
+DEEPSEEK_API_KEY=your-deepseek-key
+DEEPSEEK_BASE_URL=https://api.deepseek.com/v1
+
+# Optional - Ollama local models (auto-detected if set)
+OLLAMA_BASE_URL=http://localhost:11434/v1
+OLLAMA_MODELS=llama3.1:8b,mistral:7b
 ```
 
 ### 3. Start Services
@@ -123,6 +152,13 @@ The agent console shows real-time progress with live streaming logs:
 - **Console Title**: "控制台" (Chinese) or "Console" (English)
 - **Collapse/Expand**: Click the collapse button to minimize the console to a sidebar
 - **Model Selection**: Choose the LLM model for generation (default: gpt-4o)
+  - Displays cost tier (Low/Medium/High)
+  - Shows local model indicator [Local] for Ollama models
+  - Shows fallback chain indicators
+- **Cost Tracking**: Real-time cost display in USD
+  - Aggregated from all LLM calls
+  - Persists in localStorage
+  - Shows per-task breakdown in status bar
 - **Language Controls**: Unified interface for language switching:
   - **界面**: Toggle between [中|EN] to switch UI language
   - **综述**: Toggle between [中|EN] to choose review generation language
@@ -130,6 +166,7 @@ The agent console shows real-time progress with live streaming logs:
 **State Preservation:**
 - Switching UI locale preserves all session data (threadId, draft, messages, logs)
 - Uses sessionStorage to maintain state across page reloads
+- Model selection persists via localStorage
 
 **Auto-Regeneration:**
 - When changing the output language, the review automatically regenerates in the new language
@@ -140,6 +177,7 @@ The agent console shows real-time progress with live streaming logs:
 ### Backend
 - **FastAPI** - Async web framework
 - **LangGraph** - Workflow orchestration with checkpointing
+- **AI Runtime Layer** - Task-aware model routing with fallback chains
 - **OpenAI** - LLM for keyword generation and review writing
 - **aiohttp** - Async HTTP client for Semantic Scholar, arXiv, and PubMed
 - **Pydantic** - Data validation and serialization
@@ -152,6 +190,119 @@ The agent console shows real-time progress with live streaming logs:
 - **Tailwind CSS** - Styling
 - **react-markdown** - Review rendering
 - **Radix UI** - Accessible components
+
+## AI Runtime Layer
+
+Auto-Scholar includes a task-aware AI runtime layer that optimizes model selection based on the specific task requirements.
+
+### Task-Aware Model Routing
+
+The system automatically selects the most appropriate model for each workflow task:
+
+| Task Type | Requirements | Model Selection Criteria |
+|-----------|-------------|------------------------|
+| **Planning** | High reasoning, structured output | Prioritizes `reasoning_score`, requires `supports_structured_output` |
+| **Extraction** | Structured output, cost-effective | Balances `cost_tier` and `latency_score` |
+| **Writing** | Long context, creative | Requires `supports_long_context`, prioritizes `creativity_score` |
+| **QA** | Structured output, low latency | Favors low `cost_tier`, high `latency_score` |
+| **Reflection** | High reasoning, structured output | Similar to planning but with cost considerations |
+
+### Multi-Model Support
+
+Auto-Scholar supports multiple LLM providers and models through a flexible configuration system:
+
+**Supported Providers:**
+- OpenAI (GPT-4o, GPT-4o-mini)
+- DeepSeek (DeepSeek Chat, DeepSeek Reasoner)
+- Ollama (Local models)
+- Custom providers (Any OpenAI-compatible endpoint)
+
+**Model Configuration:**
+
+Models are configured via YAML at `config/models.yaml`. Each model defines:
+- `id`: Canonical identifier (e.g., `openai:gpt-4o`)
+- `display_name`: Human-readable name for UI
+- `provider`: Provider type
+- `api_base` / `api_key_env`: Connection details
+- **Capability scores** (1-10):
+  - `reasoning_score`: Reasoning ability
+  - `creativity_score`: Creative writing ability
+  - `latency_score`: Speed (1=slow, 10=fast)
+- **Flags:**
+  - `supports_json_mode`: JSON response format
+  - `supports_structured_output`: Reliable JSON generation
+  - `supports_long_context`: ≥32K context window
+- `cost_tier`: LOW, MEDIUM, or HIGH classification
+- `max_output_tokens`: Maximum generation tokens
+
+**Example Configuration:**
+
+```yaml
+models:
+  - id: "openai:gpt-4o"
+    provider: "openai"
+    model_name: "gpt-4o"
+    display_name: "GPT-4o (OpenAI)"
+    api_base: "${LLM_BASE_URL:-https://api.openai.com/v1}"
+    api_key_env: "LLM_API_KEY"
+    supports_json_mode: true
+    supports_structured_output: true
+    max_output_tokens: 8192
+    is_local: false
+    max_context_tokens: 128000
+    supports_long_context: true
+    cost_tier: 3          # HIGH
+    reasoning_score: 8
+    creativity_score: 8
+    latency_score: 6
+```
+
+**Environment Variables:**
+
+```env
+# YAML model configuration (takes priority)
+MODEL_CONFIG_PATH=config/models.yaml
+
+# Fallback: JSON-based registry
+MODEL_REGISTRY=[{"id":"custom:model","provider":"custom",...}]
+
+# Default model for requests without model_id
+LLM_MODEL_ID=openai:gpt-4o
+
+# Provider-specific keys (auto-detected if set)
+DEEPSEEK_API_KEY=your-deepseek-key
+OLLAMA_BASE_URL=http://localhost:11434/v1
+OLLAMA_MODELS=llama3.1:8b,mistral:7b
+```
+
+**Fallback Chains:**
+
+When a model fails (rate limit, timeout, error), the runtime automatically tries the next best model in the fallback chain. Chains are generated based on task requirements and model capabilities.
+
+**Client Caching:**
+
+LLM clients are cached by `(base_url, api_key)` to avoid connection overhead across multiple requests.
+
+### Cost Tracking
+
+The system tracks LLM usage costs in real-time:
+
+**Per-Task Breakdown:**
+Costs are aggregated by task type (planning, extraction, writing, QA, reflection) for detailed analysis.
+
+**Real-Time Updates:**
+- SSE event: `{"event":"cost_update","node":"extraction","total_cost_usd":0.045}`
+- Frontend displays cost in the agent console status bar
+- Stored in Zustand state with localStorage persistence
+
+**Cost Estimation:**
+Uses provider-specific pricing models to convert token counts to USD. OpenAI and DeepSeek pricing is built-in; custom providers use fallback rates.
+
+**Access:**
+```python
+from backend.evaluation.cost_tracker import get_total_cost_usd
+total_cost = get_total_cost_usd()  # Returns float USD
+```
 
 ## Performance
 

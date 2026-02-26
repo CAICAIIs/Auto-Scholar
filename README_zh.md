@@ -22,6 +22,10 @@ Auto-Scholar 帮助研究人员快速生成结构化的文献综述。输入研�
 ## 核心特性
 
 - **6 节点工作流**：规划 → 检索 → [人工确认] → 精读 → 撰写 → 质检 → 反思
+- **AI Runtime Layer**：任务感知模型路由，根据任务类型自动选择最优模型，支持多层回退
+- **多模型支持**：支持 OpenAI、DeepSeek、Ollama（本地）等多种 LLM 提供商
+- **YAML 模型配置**：通过 `config/models.yaml` 灵活配置模型能力评分和成本层级
+- **实时成本追踪**：按任务类型细分 LLM 使用成本，USD 实时显示
 - **防幻觉 QA 自愈机制**：严格的引用校验，自动重试（最多 3 次）
 - **Event Queue 防抖引擎**：85-98% 的 SSE 网络请求削减
 - **Human-in-the-Loop**：在文献精读前中断工作流，等待人工确认
@@ -79,6 +83,31 @@ CLAIM_VERIFICATION_CONCURRENCY=2
 # 默认值：true（保持 97.3% 引用准确率）
 # 设置为 "false" 可禁用并减少工作流时间
 CLAIM_VERIFICATION_ENABLED=true
+
+# === AI Runtime Layer 配置 ===
+
+# 可选 - YAML 模型配置文件路径
+# 如果设置，优先级高于 MODEL_REGISTRY 和自动检测
+# 默认值：""（从环境变量自动检测）
+MODEL_CONFIG_PATH=config/models.yaml
+
+# 可选 - JSON 字符串定义可用模型（YAML 的替代方案）
+# 示例：MODEL_REGISTRY=[{"id":"openai:gpt-4o","provider":"openai",...}]
+# 默认值：""（从环境变量自动检测）
+MODEL_REGISTRY=
+
+# 可选 - 每次请求路由的默认模型 ID
+# 格式："provider:model_name"（如 "openai:gpt-4o"、"deepseek:deepseek-chat"）
+# 如果为空，使用传统的 LLM_BASE_URL + LLM_MODEL 作为默认值
+LLM_MODEL_ID=
+
+# 可选 - DeepSeek API 配置（设置后自动检测）
+DEEPSEEK_API_KEY=your-deepseek-key
+DEEPSEEK_BASE_URL=https://api.deepseek.com/v1
+
+# 可选 - Ollama 本地模型（设置后自动检测）
+OLLAMA_BASE_URL=http://localhost:11434/v1
+OLLAMA_MODELS=llama3.1:8b,mistral:7b
 ```
 
 ### 3. 启动服务
@@ -129,6 +158,13 @@ cd frontend && bun run dev
 - **控制台标题**：显示"控制台"（中文界面）或"Console"（英文界面）
 - **折叠/展开**：点击折叠按钮将控制台最小化为侧边栏
 - **模型选择**：选择用于生成的 LLM 模型（默认：gpt-4o）
+  - 显示成本层级（低/中/高）
+  - 显示本地模型指示器 [Local]（Ollama 模型）
+  - 显示回退链指示器
+- **成本追踪**：实时成本显示（美元）
+  - 汇总所有 LLM 调用
+  - 使用 localStorage 持久化
+  - 状态栏显示按任务细分的成本
 - **语言控制**：统一的语言切换界面：
   - **界面**：切换 [中|EN] 以切换界面语言
   - **综述**：切换 [中|EN] 以选择综述生成语言
@@ -136,6 +172,7 @@ cd frontend && bun run dev
 **状态保持：**
 - 切换界面语言时会保留所有会话数据（threadId、草稿、消息、日志等）
 - 使用 sessionStorage 在页面重新加载后保持状态
+- 模型选择通过 localStorage 持久化
 
 **自动重新生成：**
 - 更改输出语言时，综述会自动以新语言重新生成
@@ -146,6 +183,7 @@ cd frontend && bun run dev
 ### 后端
 - **FastAPI** - 异步 Web 框架
 - **LangGraph** - 工作流编排，支持检查点
+- **AI Runtime Layer** - 任务感知模型路由，支持回退链
 - **OpenAI** - LLM 用于关键词生成和综述撰写
 - **aiohttp** - Semantic Scholar、arXiv 和 PubMed 的异步 HTTP 客户端
 - **Pydantic** - 数据验证和序列化
@@ -158,6 +196,119 @@ cd frontend && bun run dev
 - **Tailwind CSS** - 样式
 - **react-markdown** - 综述渲染
 - **Radix UI** - 可访问组件
+
+## AI Runtime Layer
+
+Auto-Scholar 包含一个任务感知的 AI Runtime 层，根据具体任务需求优化模型选择。
+
+### 任务感知模型路由
+
+系统会自动为每个工作流任务选择最合适的模型：
+
+| 任务类型 | 需求 | 模型选择标准 |
+|---------|------|-------------|
+| **规划** | 高推理能力，结构化输出 | 优先选择 `reasoning_score`，要求 `supports_structured_output` |
+| **提取** | 结构化输出，高性价比 | 平衡 `cost_tier` 和 `latency_score` |
+| **撰写** | 长上下文，创造力 | 要求 `supports_long_context`，优先 `creativity_score` |
+| **质检** | 结构化输出，低延迟 | 优先低 `cost_tier`，高 `latency_score` |
+| **反思** | 高推理能力，结构化输出 | 类似规划，但考虑成本因素 |
+
+### 多模型支持
+
+Auto-Scholar 通过灵活的配置系统支持多个 LLM 提供商和模型：
+
+**支持的提供商：**
+- OpenAI (GPT-4o, GPT-4o-mini)
+- DeepSeek (DeepSeek Chat, DeepSeek Reasoner)
+- Ollama (本地模型)
+- 自定义提供商（任何兼容 OpenAI 的端点）
+
+**模型配置：**
+
+模型通过 `config/models.yaml` 的 YAML 文件配置。每个模型定义：
+- `id`: 规范标识符（如 `openai:gpt-4o`）
+- `display_name`: UI 显示名称
+- `provider`: 提供商类型
+- `api_base` / `api_key_env`: 连接详情
+- **能力评分** (1-10)：
+  - `reasoning_score`: 推理能力
+  - `creativity_score`: 创意写作能力
+  - `latency_score`: 速度（1=慢，10=快）
+- **标志位**：
+  - `supports_json_mode`: JSON 响应格式
+  - `supports_structured_output`: 可靠的 JSON 生成
+  - `supports_long_context`: ≥32K 上下文窗口
+- `cost_tier`: LOW、MEDIUM 或 HIGH 分类
+- `max_output_tokens`: 最大生成 token 数
+
+**配置示例：**
+
+```yaml
+models:
+  - id: "openai:gpt-4o"
+    provider: "openai"
+    model_name: "gpt-4o"
+    display_name: "GPT-4o (OpenAI)"
+    api_base: "${LLM_BASE_URL:-https://api.openai.com/v1}"
+    api_key_env: "LLM_API_KEY"
+    supports_json_mode: true
+    supports_structured_output: true
+    max_output_tokens: 8192
+    is_local: false
+    max_context_tokens: 128000
+    supports_long_context: true
+    cost_tier: 3          # HIGH
+    reasoning_score: 8
+    creativity_score: 8
+    latency_score: 6
+```
+
+**环境变量：**
+
+```env
+# YAML 模型配置（优先级最高）
+MODEL_CONFIG_PATH=config/models.yaml
+
+# 回退方案：基于 JSON 的注册表
+MODEL_REGISTRY=[{"id":"custom:model","provider":"custom",...}]
+
+# 请求无 model_id 时的默认模型
+LLM_MODEL_ID=openai:gpt-4o
+
+# 提供商特定的密钥（设置后自动检测）
+DEEPSEEK_API_KEY=your-deepseek-key
+OLLAMA_BASE_URL=http://localhost:11434/v1
+OLLAMA_MODELS=llama3.1:8b,mistral:7b
+```
+
+**回退链：**
+
+当模型失败（限流、超时、错误）时，运行时会自动尝试回退链中的下一个最佳模型。回退链基于任务需求和模型能力生成。
+
+**客户端缓存：**
+
+LLM 客户端按 `(base_url, api_key)` 缓存，避免多次请求时的连接开销。
+
+### 成本追踪
+
+系统实时追踪 LLM 使用成本：
+
+**按任务细分：**
+成本按任务类型（规划、提取、撰写、质检、反思）聚合，用于详细分析。
+
+**实时更新：**
+- SSE 事件：`{"event":"cost_update","node":"extraction","total_cost_usd":0.045}`
+- 前端在智能助手控制台状态栏显示成本
+- 使用 Zustand 状态存储，localStorage 持久化
+
+**成本估算：**
+使用提供商特定的定价模型将 token 数量转换为美元。OpenAI 和 DeepSeek 的定价内置；自定义提供商使用备用费率。
+
+**访问方式：**
+```python
+from backend.evaluation.cost_tracker import get_total_cost_usd
+total_cost = get_total_cost_usd()  # 返回美元金额（float）
+```
 
 ## 测试
 
