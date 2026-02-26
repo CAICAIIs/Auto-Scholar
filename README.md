@@ -314,15 +314,6 @@ total_cost = get_total_cost_usd()  # Returns float USD
 | LLM call count (10 papers) | ~26-36 | ~20-28 | Achieved |
 | Citation accuracy | 97.3% | ≥97.0% | Maintained |
 
-### Implementation Summary
-
-Phase 1 optimizations completed (Low Risk, Medium Impact):
-1. **Environment Variable for LLM_CONCURRENCY**: Opt-in performance tuning with safe defaults
-2. **Parallelize Fulltext Enrichment**: 10-15s savings for 10 papers
-
-Phase 2 optimization completed (Medium Risk, Low-Medium Impact):
-3. **Batch Claim Extraction**: 3-5s savings in critic agent
-
 ### Current Performance Metrics
 
 | Metric | Value | Validation Method |
