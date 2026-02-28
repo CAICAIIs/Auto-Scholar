@@ -16,13 +16,13 @@ logger = logging.getLogger(__name__)
 
 
 class TextChunk(BaseModel):
-    """A chunk of text with metadata."""
-
     text: str = Field(description="The text content of the chunk")
     chunk_index: int = Field(description="Index of this chunk in the sequence")
     token_count: int = Field(description="Number of tokens in this chunk")
     start_char: int = Field(description="Start character position in original text")
     end_char: int = Field(description="End character position in original text")
+    page_start: int | None = Field(default=None, description="Starting page number")
+    page_end: int | None = Field(default=None, description="Ending page number")
     metadata: dict[str, Any] = Field(default_factory=dict, description="Additional metadata")
 
 

@@ -1,4 +1,71 @@
 services:
+  # PostgreSQL - Metadata storage
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-autoscholar}
+      POSTGRES_USER: ${POSTGRES_USER:-autoscholar}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-autoscholar}
+    ports:
+      - "${POSTGRES_PORT:-5432}:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-autoscholar}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
+  # Redis - Caching layer
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "${REDIS_PORT:-6379}:6379"
+    command: redis-server --appendonly yes ${REDIS_PASSWORD:+--requirepass $REDIS_PASSWORD}
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
+  # MinIO - Object storage for PDFs
+  minio:
+    image: minio/minio:latest
+    ports:
+      - "${MINIO_PORT:-9000}:9000"
+      - "${MINIO_CONSOLE_PORT:-9001}:9001"
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ACCESS_KEY:-minioadmin}
+      MINIO_ROOT_PASSWORD: ${MINIO_SECRET_KEY:-minioadmin}
+    command: server /data --console-address ":9001"
+    volumes:
+      - minio_data:/data
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
+      interval: 30s
+      timeout: 20s
+      retries: 3
+    restart: unless-stopped
+
+  # Qdrant - Vector database
+  qdrant:
+    image: qdrant/qdrant:latest
+    ports:
+      - "${QDRANT_PORT:-6333}:6333"
+      - "${QDRANT_GRPC_PORT:-6334}:6334"
+    volumes:
+      - qdrant_data:/qdrant/storage
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:6333/healthz"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    restart: unless-stopped
+
   backend:
     build:
       context: .
@@ -10,14 +77,44 @@ services:
       - LLM_BASE_URL=${LLM_BASE_URL:-https://api.openai.com/v1}
       - LLM_MODEL=${LLM_MODEL:-gpt-4o}
       - SEMANTIC_SCHOLAR_API_KEY=${SEMANTIC_SCHOLAR_API_KEY:-}
+      # Vector pipeline toggle
+      - VECTOR_PIPELINE_ENABLED=${VECTOR_PIPELINE_ENABLED:-false}
+      # PostgreSQL
+      - POSTGRES_HOST=postgres
+      - POSTGRES_PORT=5432
+      - POSTGRES_DB=${POSTGRES_DB:-autoscholar}
+      - POSTGRES_USER=${POSTGRES_USER:-autoscholar}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-autoscholar}
+      # Redis
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - REDIS_PASSWORD=${REDIS_PASSWORD:-}
+      # MinIO
+      - MINIO_ENDPOINT=minio:9000
+      - MINIO_ACCESS_KEY=${MINIO_ACCESS_KEY:-minioadmin}
+      - MINIO_SECRET_KEY=${MINIO_SECRET_KEY:-minioadmin}
+      - MINIO_SECURE=false
+      # Qdrant
+      - QDRANT_HOST=qdrant
+      - QDRANT_PORT=6333
     volumes:
       - checkpoint_data:/data
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
+      qdrant:
+        condition: service_healthy
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8000/docs"]
       interval: 30s
       timeout: 10s
       retries: 3
-      start_period: 10s
+      start_period: 40s
+    restart: unless-stopped
 
   frontend:
     build:
@@ -30,6 +127,11 @@ services:
     depends_on:
       backend:
         condition: service_healthy
+    restart: unless-stopped
 
 volumes:
   checkpoint_data:
+  postgres_data:
+  redis_data:
+  minio_data:
+  qdrant_data:

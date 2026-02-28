@@ -325,30 +325,43 @@ EMBEDDING_MAX_RETRIES = 3
 # Why 3: Same as LLM_CONCURRENCY pattern. Handles transient API failures.
 
 # =============================================================================
+# PostgreSQL Configuration
+# =============================================================================
+
+POSTGRES_HOST = os.getenv("POSTGRES_HOST", "localhost")
+POSTGRES_PORT = _parse_int_env("POSTGRES_PORT", default=5432, min_val=1, max_val=65535)
+POSTGRES_DB = os.getenv("POSTGRES_DB", "autoscholar")
+POSTGRES_USER = os.getenv("POSTGRES_USER", "autoscholar")
+POSTGRES_PASSWORD = os.getenv("POSTGRES_PASSWORD", "autoscholar")
+
+
+def get_postgres_url() -> str:
+    return f"postgresql+asyncpg://{POSTGRES_USER}:{POSTGRES_PASSWORD}@{POSTGRES_HOST}:{POSTGRES_PORT}/{POSTGRES_DB}"
+
+
+# =============================================================================
 # Vector Store Configuration
 # =============================================================================
 
 QDRANT_HOST = os.getenv("QDRANT_HOST", "localhost")
-# Why localhost: Default local deployment with Qdrant in docker-compose.
-
 QDRANT_PORT = _parse_int_env("QDRANT_PORT", default=6333, min_val=1, max_val=65535)
-# Why 6333: Standard Qdrant HTTP API port.
-
 QDRANT_COLLECTION_NAME = os.getenv("QDRANT_COLLECTION_NAME", "paper_chunks")
-# Why paper_chunks: Descriptive name for academic paper text chunks.
 
 VECTOR_SEARCH_LIMIT = 10
-# Why 10: Balance between context richness and token budget for claim verification.
-
 VECTOR_SEARCH_THRESHOLD = 0.7
-# Why 0.7: Cosine similarity threshold. 0.7+ indicates strong semantic relevance.
 
 # =============================================================================
 # Vector Pipeline Feature Flag
 # =============================================================================
 
 VECTOR_PIPELINE_ENABLED = os.getenv("VECTOR_PIPELINE_ENABLED", "false").lower() == "true"
-# Why false by default: Vector pipeline requires Qdrant + Redis infrastructure.
-# Enable in environments where Qdrant is available. When disabled, the workflow
-# falls back to abstract-only extraction (existing behavior).
-# Set VECTOR_PIPELINE_ENABLED=true to activate PDF→chunk→embed→index pipeline.
+
+# =============================================================================
+# RAG Ingestion Gateway
+# When RAG_GATEWAY_URL is set, extractor_agent delegates PDF ingestion to the
+# Go gateway instead of running the inline Python pipeline. The gateway handles
+# download → chunk → embed → index asynchronously with ~64KB peak memory per PDF.
+# =============================================================================
+
+RAG_GATEWAY_URL = os.getenv("RAG_GATEWAY_URL", "")
+RAG_GATEWAY_TIMEOUT = _parse_int_env("RAG_GATEWAY_TIMEOUT", default=10, min_val=1, max_val=60)

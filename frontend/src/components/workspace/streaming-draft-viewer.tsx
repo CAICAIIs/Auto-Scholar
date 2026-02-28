@@ -1,20 +1,46 @@
 "use client"
 
-import { useEffect, useRef } from "react"
+import { useEffect, useRef, useMemo, useCallback } from "react"
 import ReactMarkdown from "react-markdown"
 import remarkGfm from "remark-gfm"
 import { useResearchStore } from "@/store/research"
 import { useTranslations } from "next-intl"
+
+const REMARKGFM_PLUGINS = [remarkGfm]
 
 export function StreamingDraftViewer() {
   const t = useTranslations("workspace")
   const streamingText = useResearchStore((s) => s.streamingText)
   const isStreaming = useResearchStore((s) => s.isStreaming)
   const bottomRef = useRef<HTMLDivElement>(null)
+  const scrollRafRef = useRef<number | null>(null)
+
+  const scrollToBottom = useCallback(() => {
+    if (scrollRafRef.current !== null) return
+    scrollRafRef.current = requestAnimationFrame(() => {
+      scrollRafRef.current = null
+      bottomRef.current?.scrollIntoView({ behavior: "auto" })
+    })
+  }, [])
 
   useEffect(() => {
-    bottomRef.current?.scrollIntoView({ behavior: "smooth" })
-  }, [streamingText])
+    scrollToBottom()
+  }, [streamingText, scrollToBottom])
+
+  useEffect(() => {
+    return () => {
+      if (scrollRafRef.current !== null) cancelAnimationFrame(scrollRafRef.current)
+    }
+  }, [])
+
+  const renderedMarkdown = useMemo(
+    () => (
+      <ReactMarkdown remarkPlugins={REMARKGFM_PLUGINS}>
+        {streamingText}
+      </ReactMarkdown>
+    ),
+    [streamingText]
+  )
 
   if (!isStreaming && !streamingText) return null
 
@@ -31,9 +57,7 @@ export function StreamingDraftViewer() {
         </span>
       </div>
       <div className="text-zinc-700 dark:text-zinc-300 leading-relaxed">
-        <ReactMarkdown remarkPlugins={[remarkGfm]}>
-          {streamingText}
-        </ReactMarkdown>
+        {renderedMarkdown}
         {isStreaming && (
           <span className="inline-block w-0.5 h-5 bg-zinc-600 dark:bg-zinc-300 animate-pulse ml-0.5 align-text-bottom" />
         )}

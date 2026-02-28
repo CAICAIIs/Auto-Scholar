@@ -2,6 +2,7 @@ import asyncio
 import json
 import logging
 import re
+from typing import Any
 
 from pydantic import BaseModel
 
@@ -213,7 +214,40 @@ async def verify_single_claim(
     claim: Claim,
     citation_index: int,
     paper: PaperMetadata,
+    vector_store: Any | None = None,
 ) -> ClaimVerificationResult:
+    paper_context = paper.abstract[:1000] if paper.abstract else ""
+
+    if vector_store is not None:
+        try:
+            from backend.utils.clients import get_embedder
+
+            embedder = await get_embedder()
+            if embedder:
+                claim_embedding = await embedder.embed_text(claim.text)
+
+                search_results = await vector_store.search(
+                    query_vector=claim_embedding,
+                    limit=5,
+                    score_threshold=0.7,
+                    filter_dict={"must": [{"key": "paper_id", "match": {"value": paper.paper_id}}]},
+                )
+
+                if search_results:
+                    relevant_chunks = []
+                    for result in search_results:
+                        chunk_text = result["payload"].get("chunk_text", "")
+                        page_start = result["payload"].get("page_start")
+                        page_end = result["payload"].get("page_end")
+                        if chunk_text:
+                            page_info = f" (pages {page_start}-{page_end})" if page_start else ""
+                            relevant_chunks.append(f"{chunk_text}{page_info}")
+
+                    if relevant_chunks:
+                        paper_context = "\n\n".join(relevant_chunks[:3])
+        except Exception as e:
+            logger.warning("Failed to retrieve full-text context: %s", e)
+
     result = await structured_completion(
         messages=[
             {"role": "system", "content": CLAIM_VERIFICATION_SYSTEM},
@@ -223,7 +257,7 @@ async def verify_single_claim(
                     claim_text=claim.text,
                     citation_index=citation_index,
                     paper_title=paper.title,
-                    paper_abstract=paper.abstract[:1000],
+                    paper_abstract=paper_context,
                     paper_contribution=paper.core_contribution or "Not available",
                 ),
             },
@@ -256,6 +290,7 @@ async def verify_claims(
     claims: list[Claim],
     papers: list[PaperMetadata],
     concurrency: int = 2,
+    vector_store: Any | None = None,
 ) -> list[ClaimVerificationResult]:
     verification_tasks: list[tuple[Claim, int, PaperMetadata]] = []
 
@@ -275,7 +310,7 @@ async def verify_claims(
     ) -> ClaimVerificationResult | None:
         async with semaphore:
             try:
-                return await verify_single_claim(claim, citation_index, paper)
+                return await verify_single_claim(claim, citation_index, paper, vector_store)
             except Exception as e:
                 logger.warning(
                     "Failed to verify claim %s against paper %d: %s",
@@ -314,6 +349,7 @@ async def verify_draft_citations(
     draft: DraftOutput,
     papers: list[PaperMetadata],
     concurrency: int = 2,
+    vector_store: Any | None = None,
 ) -> tuple[list[Claim], ClaimVerificationSummary]:
     logger.info("Extracting claims from draft with %d sections", len(draft.sections))
     claims = await extract_all_claims(draft)
@@ -330,7 +366,7 @@ async def verify_draft_citations(
         )
 
     logger.info("Verifying claims against %d papers", len(papers))
-    results = await verify_claims(claims, papers, concurrency)
+    results = await verify_claims(claims, papers, concurrency, vector_store)
     logger.info("Completed %d verifications", len(results))
 
     summary = summarize_verifications(claims, results)

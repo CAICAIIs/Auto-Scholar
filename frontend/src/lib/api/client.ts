@@ -151,45 +151,52 @@ export function createSSEConnection(
   const eventSource = new EventSource(`${API_BASE}/api/research/stream/${threadId}`)
 
   eventSource.onmessage = (event) => {
-    try {
-      const data = JSON.parse(event.data)
-      
-      if (data.event === "completed") {
-        callbacks.onCompleted({
-          final_draft: data.final_draft ?? null,
-          candidate_papers: data.candidate_papers ?? [],
-        })
-        eventSource.close()
-        return
-      }
-      
-      if (data.event === "error") {
-        callbacks.onError(data.detail || "Unknown error")
-        eventSource.close()
-        return
-      }
+    // Backend debounce queue may concatenate multiple JSON objects per SSE message.
+    // Split by newlines and parse each independently.
+    const lines = event.data.split("\n").filter((l: string) => l.trim())
+    for (const line of lines) {
+      try {
+        const data = JSON.parse(line)
 
-      if (data.event === "cost_update") {
-        callbacks.onCostUpdate?.(data.total_cost_usd)
-        return
-      }
+        if (data.event === "completed") {
+          callbacks.onCompleted({
+            final_draft: data.final_draft ?? null,
+            candidate_papers: data.candidate_papers ?? [],
+          })
+          eventSource.close()
+          return
+        }
 
-      if (data.event === "draft_token") {
-        callbacks.onDraftToken?.(data.token)
-        return
+        if (data.event === "error") {
+          callbacks.onError(data.detail || "Unknown error")
+          eventSource.close()
+          return
+        }
+
+        if (data.event === "cost_update") {
+          callbacks.onCostUpdate?.(data.total_cost_usd)
+          continue
+        }
+
+        if (data.event === "draft_token") {
+          callbacks.onDraftToken?.(data.token)
+          continue
+        }
+
+        if (data.node && data.log) {
+          callbacks.onMessage(data.node, data.log)
+        }
+      } catch {
+        console.error("Failed to parse SSE line:", line)
       }
-      
-      if (data.node && data.log) {
-        callbacks.onMessage(data.node, data.log)
-      }
-    } catch {
-      console.error("Failed to parse SSE message:", event.data)
     }
   }
 
   eventSource.onerror = () => {
-    callbacks.onError("Connection lost")
-    eventSource.close()
+    if (eventSource.readyState === EventSource.CLOSED) {
+      callbacks.onError("网络错误，请检查网络连接后重试。 (Failed to fetch)")
+      eventSource.close()
+    }
   }
 
   return () => eventSource.close()

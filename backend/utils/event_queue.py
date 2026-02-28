@@ -91,13 +91,18 @@ class StreamingEventQueue:
 
         await self._queue.put(None)
 
+    HEARTBEAT_INTERVAL_S: float = 15.0
+    HEARTBEAT_SENTINEL: str = "__heartbeat__"
+
     async def consume(self) -> AsyncIterator[str]:
-        """消费合并后的 chunks，直到收到终止信号"""
         while True:
-            chunk = await self._queue.get()
-            if chunk is None:
-                break
-            yield chunk
+            try:
+                chunk = await asyncio.wait_for(self._queue.get(), timeout=self.HEARTBEAT_INTERVAL_S)
+                if chunk is None:
+                    break
+                yield chunk
+            except TimeoutError:
+                yield self.HEARTBEAT_SENTINEL
 
     def get_stats(self) -> dict[str, int | float]:
         """返回统计信息：总 token 数、总 flush 次数、压缩比"""
@@ -110,3 +115,95 @@ class StreamingEventQueue:
                 else 0.0
             ),
         }
+
+
+class JsonFieldExtractor:
+    """
+    从流式 JSON token 序列中提取指定字段的字符串值。
+
+    状态机：SCANNING → SAW_KEY → SAW_COLON → IN_STRING
+    用于从 structured_completion 的 JSON 流中提取 "content" / "heading" 等字段，
+    过滤掉 JSON 结构符号（{, }, 字段名等），只保留用户可读文本。
+    """
+
+    _SCANNING = 0
+    _SAW_KEY = 1
+    _SAW_COLON = 2
+    _IN_STRING = 3
+
+    def __init__(self, field_name: str, buffer_until_complete: bool = False) -> None:
+        self._key_pattern = f'"{field_name}"'
+        self._key_len = len(self._key_pattern)
+        self._state = self._SCANNING
+        self._escape_next = False
+        self._scan_buf = ""
+        self._buffer_until_complete = buffer_until_complete
+        self._value_buf: list[str] = []
+
+    def feed(self, token: str) -> str | None:
+        self._scan_buf += token
+        parts: list[str] = []
+        i = 0
+
+        while i < len(self._scan_buf):
+            ch = self._scan_buf[i]
+
+            if self._state == self._SCANNING:
+                pos = self._scan_buf.find(self._key_pattern, i)
+                if pos == -1:
+                    self._scan_buf = self._scan_buf[-(self._key_len - 1) :]
+                    return self._emit(parts)
+                i = pos + self._key_len
+                self._state = self._SAW_KEY
+
+            elif self._state == self._SAW_KEY:
+                if ch == ":":
+                    self._state = self._SAW_COLON
+                elif not ch.isspace():
+                    self._state = self._SCANNING
+                i += 1
+
+            elif self._state == self._SAW_COLON:
+                if ch == '"':
+                    self._state = self._IN_STRING
+                elif not ch.isspace():
+                    self._state = self._SCANNING
+                i += 1
+
+            elif self._state == self._IN_STRING:
+                if self._escape_next:
+                    self._escape_next = False
+                    if ch == "n":
+                        parts.append("\n")
+                    elif ch == "t":
+                        parts.append("\t")
+                    elif ch in ('"', "\\", "/"):
+                        parts.append(ch)
+                    else:
+                        parts.append(ch)
+                elif ch == "\\":
+                    self._escape_next = True
+                elif ch == '"':
+                    self._state = self._SCANNING
+                    if self._buffer_until_complete:
+                        self._value_buf.extend(parts)
+                        parts = []
+                        complete = "".join(self._value_buf)
+                        self._value_buf.clear()
+                        if complete:
+                            parts.append(complete)
+                else:
+                    parts.append(ch)
+                i += 1
+
+        self._scan_buf = ""
+
+        if self._buffer_until_complete and self._state == self._IN_STRING:
+            self._value_buf.extend(parts)
+            return None
+
+        return self._emit(parts)
+
+    @staticmethod
+    def _emit(parts: list[str]) -> str | None:
+        return "".join(parts) if parts else None

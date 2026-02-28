@@ -1,20 +1,35 @@
 "use client"
 
-import { useEffect, useRef } from "react"
+import { useEffect, useRef, useCallback } from "react"
 import { useResearchStore } from "@/store/research"
 import { useTranslations, useLocale } from 'next-intl'
 
 export function LogStream() {
   const logs = useResearchStore((s) => s.logs)
   const scrollRef = useRef<HTMLDivElement>(null)
+  const scrollRafRef = useRef<number | null>(null)
   const t = useTranslations('log')
   const locale = useLocale()
 
+  const scrollToBottom = useCallback(() => {
+    if (scrollRafRef.current !== null) return
+    scrollRafRef.current = requestAnimationFrame(() => {
+      scrollRafRef.current = null
+      if (scrollRef.current) {
+        scrollRef.current.scrollTop = scrollRef.current.scrollHeight
+      }
+    })
+  }, [])
+
   useEffect(() => {
-    if (scrollRef.current) {
-      scrollRef.current.scrollTop = scrollRef.current.scrollHeight
+    scrollToBottom()
+  }, [logs, scrollToBottom])
+
+  useEffect(() => {
+    return () => {
+      if (scrollRafRef.current !== null) cancelAnimationFrame(scrollRafRef.current)
     }
-  }, [logs])
+  }, [])
 
   const formatTime = (date: Date) => {
     return date.toLocaleTimeString(locale === 'zh' ? 'zh-CN' : 'en-US', {

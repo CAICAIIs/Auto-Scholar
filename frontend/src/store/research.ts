@@ -195,6 +195,22 @@ const initialState = {
 
 const hydratedState = restoredState ? { ...initialState, ...restoredState } : initialState
 
+const MAX_LOGS = 200
+
+let _streamingBuffer = ""
+let _streamingFlushId: number | ReturnType<typeof setTimeout> | null = null
+
+const _hasRAF = typeof requestAnimationFrame !== "undefined"
+
+function _flushStreamingBuffer(set: (fn: (state: ResearchState) => Partial<ResearchState>) => void) {
+  const chunk = _streamingBuffer
+  _streamingBuffer = ""
+  _streamingFlushId = null
+  if (chunk) {
+    set((state) => ({ streamingText: state.streamingText + chunk, isStreaming: true }))
+  }
+}
+
 export const useResearchStore = create<ResearchState>((set, get) => ({
   ...hydratedState,
 
@@ -202,9 +218,10 @@ export const useResearchStore = create<ResearchState>((set, get) => ({
 
   setStatus: (status) => set({ status }),
 
-  addLog: (node, message) => set((state) => ({
-    logs: [...state.logs, { timestamp: new Date(), node, message }]
-  })),
+  addLog: (node, message) => set((state) => {
+    const next = [...state.logs, { timestamp: new Date(), node, message }]
+    return { logs: next.length > MAX_LOGS ? next.slice(-MAX_LOGS) : next }
+  }),
 
   clearLogs: () => set({ logs: [] }),
 
@@ -361,12 +378,29 @@ export const useResearchStore = create<ResearchState>((set, get) => ({
 
   setTotalCostUsd: (cost) => set({ totalCostUsd: cost }),
 
-  appendStreamingToken: (token) => set((state) => ({
-    streamingText: state.streamingText + token,
-    isStreaming: true,
-  })),
+  appendStreamingToken: (token) => {
+    _streamingBuffer += token
+    if (_streamingFlushId === null) {
+      if (_hasRAF) {
+        _streamingFlushId = requestAnimationFrame(() => _flushStreamingBuffer(set))
+      } else {
+        _flushStreamingBuffer(set)
+      }
+    }
+  },
 
-  clearStreaming: () => set({ streamingText: "", isStreaming: false }),
+  clearStreaming: () => {
+    _streamingBuffer = ""
+    if (_streamingFlushId !== null) {
+      if (_hasRAF) {
+        cancelAnimationFrame(_streamingFlushId as number)
+      } else {
+        clearTimeout(_streamingFlushId)
+      }
+      _streamingFlushId = null
+    }
+    set({ streamingText: "", isStreaming: false })
+  },
 
   reset: () => set(initialState),
 }))

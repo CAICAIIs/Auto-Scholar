@@ -122,20 +122,16 @@ def _extract_text_from_bytes(pdf_data: bytes) -> str:
         PDFParseError: If PDF is encrypted, corrupted, or empty
     """
     try:
-        # Write to temporary file (pypdf needs file-like object)
         with tempfile.NamedTemporaryFile(suffix=".pdf", delete=False) as tmp:
             tmp.write(pdf_data)
             tmp_path = tmp.name
 
         try:
-            # Read PDF
             reader = PdfReader(tmp_path)
 
-            # Check if encrypted
             if reader.is_encrypted:
                 raise PDFParseError("PDF is encrypted")
 
-            # Extract text from all pages
             text_parts = []
             for page_num, page in enumerate(reader.pages, 1):
                 try:
@@ -149,14 +145,61 @@ def _extract_text_from_bytes(pdf_data: bytes) -> str:
             if not text_parts:
                 raise PDFParseError("No text extracted from PDF (may be scanned image)")
 
-            # Combine and clean text
             full_text = "\n\n".join(text_parts)
             cleaned_text = _clean_text(full_text)
 
             return cleaned_text
 
         finally:
-            # Clean up temp file
+            Path(tmp_path).unlink(missing_ok=True)
+
+    except PDFParseError:
+        raise
+    except Exception as e:
+        raise PDFParseError(f"PDF parsing error: {e}") from e
+
+
+def _extract_text_with_pages(pdf_data: bytes) -> list[tuple[int, str]]:
+    """Extract text from PDF bytes with page numbers.
+
+    Args:
+        pdf_data: PDF file content as bytes
+
+    Returns:
+        List of (page_number, cleaned_text) tuples
+
+    Raises:
+        PDFParseError: If PDF is encrypted, corrupted, or empty
+    """
+    try:
+        with tempfile.NamedTemporaryFile(suffix=".pdf", delete=False) as tmp:
+            tmp.write(pdf_data)
+            tmp_path = tmp.name
+
+        try:
+            reader = PdfReader(tmp_path)
+
+            if reader.is_encrypted:
+                raise PDFParseError("PDF is encrypted")
+
+            page_texts = []
+            for page_num, page in enumerate(reader.pages, 1):
+                try:
+                    page_text = page.extract_text()
+                    if page_text:
+                        cleaned_page_text = _clean_text(page_text)
+                        if cleaned_page_text.strip():
+                            page_texts.append((page_num, cleaned_page_text))
+                except Exception as e:
+                    logger.warning("Failed to extract text from page %d: %s", page_num, str(e))
+                    continue
+
+            if not page_texts:
+                raise PDFParseError("No text extracted from PDF (may be scanned image)")
+
+            return page_texts
+
+        finally:
             Path(tmp_path).unlink(missing_ok=True)
 
     except PDFParseError:

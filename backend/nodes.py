@@ -17,6 +17,7 @@ from backend.constants import (
     MAX_KEYWORDS,
     MIN_ENTAILMENT_RATIO,
     PAPERS_PER_QUERY,
+    RAG_GATEWAY_URL,
     VECTOR_PIPELINE_ENABLED,
     get_draft_max_tokens,
     get_section_max_tokens,
@@ -400,16 +401,38 @@ async def extractor_agent(state: AgentState) -> dict[str, Any]:
     papers_with_urls = [p for p in extracted if p.pdf_url and not p.pdf_object_key]
     if papers_with_urls:
         logger.info(
-            "extractor_agent: %d papers ready for PDF download",
+            "extractor_agent: %d papers ready for PDF ingestion",
             len(papers_with_urls),
         )
 
-        if VECTOR_PIPELINE_ENABLED:
+        if RAG_GATEWAY_URL:
             try:
+                from backend.utils.rag_gateway_client import (
+                    GatewayError,
+                    submit_papers_to_gateway,
+                )
+
+                results = await submit_papers_to_gateway(papers_with_urls)
+                accepted = sum(1 for r in results if r.get("status") == 202)
+                gateway_log = (
+                    f"RAG gateway: {accepted}/{len(papers_with_urls)} papers "
+                    f"submitted for async ingestion"
+                )
+                logger.info("extractor_agent: %s", gateway_log)
+                logs.append(gateway_log)
+            except GatewayError as e:
+                logger.warning("extractor_agent: gateway submission failed: %s", e)
+                logs.append(f"RAG gateway unavailable, skipping ingestion: {e}")
+            except Exception as e:
+                logger.warning("extractor_agent: gateway call failed, continuing: %s", e)
+
+        elif VECTOR_PIPELINE_ENABLED:
+            try:
+                from backend.utils.clients import get_embedder, get_vector_store
                 from backend.utils.vector_pipeline import run_vector_pipeline
 
-                embedder = state.get("embedder")
-                vector_store = state.get("vector_store")
+                embedder = await get_embedder()
+                vector_store = await get_vector_store()
 
                 if embedder and vector_store:
                     pipeline_summary = await run_vector_pipeline(
@@ -428,7 +451,7 @@ async def extractor_agent(state: AgentState) -> dict[str, Any]:
                 else:
                     logger.warning(
                         "extractor_agent: VECTOR_PIPELINE_ENABLED but "
-                        "embedder/vector_store not in state"
+                        "failed to initialize embedder/vector_store"
                     )
             except Exception as e:
                 logger.warning("extractor_agent: vector pipeline failed, continuing: %s", e)
@@ -882,8 +905,14 @@ async def critic_agent(state: AgentState) -> dict[str, Any]:
     if CLAIM_VERIFICATION_ENABLED and approved:
         logger.info("critic_agent: starting claim-level verification")
         try:
+            from backend.utils.clients import get_vector_store
+
+            vector_store = await get_vector_store()
             _, summary = await verify_draft_citations(
-                draft, approved, concurrency=CLAIM_VERIFICATION_CONCURRENCY
+                draft,
+                approved,
+                concurrency=CLAIM_VERIFICATION_CONCURRENCY,
+                vector_store=vector_store,
             )
             claim_verification = summary
 

@@ -30,7 +30,7 @@ from backend.schemas import (
 )
 from backend.utils.charts import generate_all_charts
 from backend.utils.citations import normalize_draft_citations
-from backend.utils.event_queue import StreamingEventQueue
+from backend.utils.event_queue import JsonFieldExtractor, StreamingEventQueue
 from backend.utils.exporter import ExportFormat, export_to_docx, export_to_markdown
 from backend.utils.http_pool import close_session
 from backend.utils.llm_client import list_models, token_callback_var
@@ -169,9 +169,33 @@ async def stream_research(thread_id: str):
     event_queue = StreamingEventQueue()
 
     async def producer():
+        title_extractor = JsonFieldExtractor("title", buffer_until_complete=True)
+        heading_extractor = JsonFieldExtractor("heading", buffer_until_complete=True)
+        content_extractor = JsonFieldExtractor("content")
+
         async def _on_draft_token(token: str) -> None:
-            token_event = json.dumps({"event": "draft_token", "token": token}, ensure_ascii=False)
-            await event_queue.push(token_event + "\n")
+            title = title_extractor.feed(token)
+            if title:
+                formatted = f"# {title}\n\n"
+                title_event = json.dumps(
+                    {"event": "draft_token", "token": formatted}, ensure_ascii=False
+                )
+                await event_queue.push(title_event + "\n")
+
+            heading = heading_extractor.feed(token)
+            if heading:
+                formatted = f"\n## {heading}\n\n"
+                heading_event = json.dumps(
+                    {"event": "draft_token", "token": formatted}, ensure_ascii=False
+                )
+                await event_queue.push(heading_event + "\n")
+
+            content = content_extractor.feed(token)
+            if content:
+                content_event = json.dumps(
+                    {"event": "draft_token", "token": content}, ensure_ascii=False
+                )
+                await event_queue.push(content_event + "\n")
 
         reset_token = token_callback_var.set(_on_draft_token)
         try:
@@ -254,7 +278,10 @@ async def stream_research(thread_id: str):
         await event_queue.start()
         asyncio.create_task(producer())
         async for chunk in event_queue.consume():
-            yield f"data: {chunk}\n"
+            if chunk == event_queue.HEARTBEAT_SENTINEL:
+                yield ": heartbeat\n\n"
+            else:
+                yield f"data: {chunk}\n"
         stats = event_queue.get_stats()
         logger.info("Stream stats for %s: %s", thread_id, stats)
 
