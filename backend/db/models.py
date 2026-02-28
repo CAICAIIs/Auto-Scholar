@@ -65,7 +65,7 @@ class Chunk(Base):
     page_end: Mapped[int | None] = mapped_column(Integer, nullable=True)
     extra_metadata: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False, default=dict)
     status: Mapped[ProcessingStatus] = mapped_column(
-        Enum(ProcessingStatus), nullable=False, default=ProcessingStatus.PENDING, index=True
+        Enum(ProcessingStatus), nullable=False, default=ProcessingStatus.PENDING
     )
     created_at: Mapped[datetime] = mapped_column(
         DateTime, nullable=False, server_default=func.now()
@@ -82,15 +82,15 @@ class Embedding(Base):
     __tablename__ = "embeddings"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
-    chunk_id: Mapped[int] = mapped_column(Integer, nullable=False, index=True)
-    paper_id: Mapped[str] = mapped_column(String(255), nullable=False, index=True)
-    vector_id: Mapped[str] = mapped_column(String(255), nullable=False, unique=True, index=True)
+    chunk_id: Mapped[int] = mapped_column(Integer, nullable=False)
+    paper_id: Mapped[str] = mapped_column(String(255), nullable=False)
+    vector_id: Mapped[str] = mapped_column(String(255), nullable=False, unique=True)
     model: Mapped[str] = mapped_column(String(100), nullable=False)
     dimensions: Mapped[int] = mapped_column(Integer, nullable=False)
     similarity_score: Mapped[float | None] = mapped_column(Float, nullable=True)
     extra_metadata: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False, default=dict)
     status: Mapped[ProcessingStatus] = mapped_column(
-        Enum(ProcessingStatus), nullable=False, default=ProcessingStatus.PENDING, index=True
+        Enum(ProcessingStatus), nullable=False, default=ProcessingStatus.PENDING
     )
     created_at: Mapped[datetime] = mapped_column(
         DateTime, nullable=False, server_default=func.now()
