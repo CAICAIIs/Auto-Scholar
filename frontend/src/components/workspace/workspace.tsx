@@ -3,6 +3,7 @@
 import { useState } from "react"
 import { useResearchStore } from "@/store/research"
 import { ReviewRenderer } from "./review-renderer"
+import { StreamingDraftViewer } from "./streaming-draft-viewer"
 import { ChartsView } from "./charts-view"
 import { MethodComparisonTable } from "./method-comparison-table"
 import { StructuredSummaryList } from "./structured-summary"
@@ -34,6 +35,8 @@ export function Workspace({ onRetry }: WorkspaceProps) {
   const setIsEditing = useResearchStore((s) => s.setIsEditing)
   const resetToOriginal = useResearchStore((s) => s.resetToOriginal)
   const selectedPaperIds = useResearchStore((s) => s.selectedPaperIds)
+  const isStreaming = useResearchStore((s) => s.isStreaming)
+  const streamingText = useResearchStore((s) => s.streamingText)
 
   const [showExportDialog, setShowExportDialog] = useState(false)
   const [exportFormat, setExportFormat] = useState<ExportFormat>("markdown")
@@ -45,6 +48,18 @@ export function Workspace({ onRetry }: WorkspaceProps) {
   const hasSelectedPapers = selectedPaperIds.size > 0
 
   if (!displayDraft) {
+    if ((isStreaming || streamingText) && isProcessing) {
+      return (
+        <div className="h-full overflow-y-auto bg-white dark:bg-zinc-900">
+          <div className="p-8">
+            <div className="max-w-3xl mx-auto">
+              <StreamingDraftViewer />
+            </div>
+          </div>
+        </div>
+      )
+    }
+
     if (isProcessing && hasSelectedPapers) {
       return (
         <div className="h-full p-6 bg-zinc-950">

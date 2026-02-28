@@ -108,7 +108,8 @@
     "structuredResults": "结果",
     "structuredLimitations": "局限性",
     "structuredFutureWork": "未来工作",
-    "structuredNotAvailable": "暂无"
+    "structuredNotAvailable": "暂无",
+    "streamingLabel": "正在撰写综述..."
   },
   "approval": {
     "title": "审核候选论文",

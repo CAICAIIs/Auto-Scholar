@@ -108,7 +108,8 @@
     "structuredResults": "Results",
     "structuredLimitations": "Limitations",
     "structuredFutureWork": "Future Work",
-    "structuredNotAvailable": "N/A"
+    "structuredNotAvailable": "N/A",
+    "streamingLabel": "Writing draft..."
   },
   "approval": {
     "title": "Review Candidate Papers",

@@ -216,3 +216,139 @@ MODEL_CONFIG_PATH = os.getenv("MODEL_CONFIG_PATH", "")
 # Path to YAML model configuration file. If set and file exists, takes priority
 # over MODEL_REGISTRY JSON and auto-detected env vars.
 # Example: MODEL_CONFIG_PATH=config/models.yaml
+
+# =============================================================================
+# PDF Object Storage (MinIO + Redis)
+# =============================================================================
+
+MINIO_ENDPOINT = os.getenv("MINIO_ENDPOINT", "localhost:9000")
+# Why localhost:9000: Matches Docker Compose MinIO API binding and keeps local
+# development zero-config. Production can override with an internal endpoint.
+
+MINIO_ACCESS_KEY = os.getenv("MINIO_ACCESS_KEY", "minioadmin")
+# Why minioadmin default: MinIO's standard local bootstrap credential keeps
+# onboarding simple. Must be overridden in production deployments.
+
+MINIO_SECRET_KEY = os.getenv("MINIO_SECRET_KEY", "minioadmin")
+# Why minioadmin default: Pairs with local dev defaults for frictionless startup;
+# production environments should always inject a strong secret.
+
+MINIO_SECURE = os.getenv("MINIO_SECURE", "false").lower() == "true"
+# Why false by default: Local Docker networking commonly uses HTTP without TLS.
+# This flag allows strict HTTPS enablement in staging/production.
+
+MINIO_BUCKET_RAW = os.getenv("MINIO_BUCKET_RAW", "rag-raw")
+# Why rag-raw: Separates original PDFs from downstream artifacts for traceability
+# and reprocessing workflows.
+
+MINIO_BUCKET_PROCESSED = os.getenv("MINIO_BUCKET_PROCESSED", "rag-processed")
+# Why rag-processed: Dedicated bucket avoids mixing transformed outputs with raw
+# source files and simplifies lifecycle/access policy tuning.
+
+MINIO_BUCKET_TMP = os.getenv("MINIO_BUCKET_TMP", "rag-tmp")
+# Why rag-tmp: Isolates ephemeral artifacts so they can be aggressively expired
+# without affecting durable raw/processed research data.
+
+REDIS_HOST = os.getenv("REDIS_HOST", "localhost")
+# Why localhost: Supports default local deployment where Redis runs in the same
+# Docker network or host machine; can be overridden for managed Redis.
+
+REDIS_PORT = _parse_int_env("REDIS_PORT", default=6379, min_val=1, max_val=65535)
+# Why 6379: Standard Redis port minimizes configuration overhead and matches the
+# official container defaults.
+
+REDIS_DB = _parse_int_env("REDIS_DB", default=0, min_val=0, max_val=15)
+# Why DB 0: Redis default logical database keeps compatibility with most clients;
+# bounded range prevents invalid DB indices.
+
+REDIS_PASSWORD = os.getenv("REDIS_PASSWORD", "")
+# Why empty default: Local development Redis commonly runs without auth. Secrets
+# should be injected in production where Redis is network-exposed.
+
+REDIS_PDF_CACHE_TTL = _parse_int_env(
+    "REDIS_PDF_CACHE_TTL", default=86400, min_val=60, max_val=604800
+)
+# Why 86400 seconds: 24-hour cache window balances hit rate for repeated PDF
+# access against staleness and memory pressure.
+
+PDF_DOWNLOAD_TIMEOUT = _parse_int_env("PDF_DOWNLOAD_TIMEOUT", default=30, min_val=5, max_val=300)
+# Why 30 seconds: Long enough for typical academic PDF downloads over moderate
+# networks while preventing hung requests from stalling the pipeline.
+
+PDF_MAX_SIZE_MB = _parse_int_env("PDF_MAX_SIZE_MB", default=50, min_val=1, max_val=500)
+# Why 50 MB: Covers most research PDFs while guarding against unusually large
+# files that can degrade throughput and memory usage.
+
+# =============================================================================
+# PDF Parsing Configuration
+# =============================================================================
+
+PDF_EXTRACTION_TIMEOUT = 60
+# Why 60: Large PDFs (100+ pages) can take 30-45s to parse. 60s provides buffer.
+
+# =============================================================================
+# Text Chunking Configuration
+# =============================================================================
+
+CHUNK_SIZE_TOKENS = 512
+# Why 512: Balances context window usage vs semantic coherence.
+# Embedding models typically support 512-8192 tokens. 512 is safe default.
+
+CHUNK_OVERLAP_TOKENS = 50
+# Why 50: ~10% overlap ensures context continuity across chunks.
+# Prevents information loss at chunk boundaries.
+
+TIKTOKEN_MODEL = "cl100k_base"
+# Why cl100k_base: Standard for GPT-4 and most modern embedding models.
+# Consistent token counting across pipeline.
+
+# =============================================================================
+# Embedding Configuration
+# =============================================================================
+
+EMBEDDING_MODEL = os.getenv("EMBEDDING_MODEL", "text-embedding-3-small")
+# Why text-embedding-3-small: OpenAI's latest, 1536 dimensions, $0.02/1M tokens.
+# Balances cost vs quality. Upgrade to text-embedding-3-large for higher accuracy.
+
+EMBEDDING_DIMENSIONS = 1536
+# Why 1536: Standard for text-embedding-3-small. Qdrant/Milvus support this.
+
+EMBEDDING_BATCH_SIZE = 100
+# Why 100: OpenAI allows up to 2048 inputs per request. 100 balances latency vs throughput.
+# Reduces API calls while keeping request size manageable.
+
+EMBEDDING_CACHE_TTL = 2592000  # 30 days in seconds
+# Why 30 days: Embeddings are deterministic for same text+model.
+# Long TTL reduces costs. Invalidate on model upgrade.
+
+EMBEDDING_MAX_RETRIES = 3
+# Why 3: Same as LLM_CONCURRENCY pattern. Handles transient API failures.
+
+# =============================================================================
+# Vector Store Configuration
+# =============================================================================
+
+QDRANT_HOST = os.getenv("QDRANT_HOST", "localhost")
+# Why localhost: Default local deployment with Qdrant in docker-compose.
+
+QDRANT_PORT = _parse_int_env("QDRANT_PORT", default=6333, min_val=1, max_val=65535)
+# Why 6333: Standard Qdrant HTTP API port.
+
+QDRANT_COLLECTION_NAME = os.getenv("QDRANT_COLLECTION_NAME", "paper_chunks")
+# Why paper_chunks: Descriptive name for academic paper text chunks.
+
+VECTOR_SEARCH_LIMIT = 10
+# Why 10: Balance between context richness and token budget for claim verification.
+
+VECTOR_SEARCH_THRESHOLD = 0.7
+# Why 0.7: Cosine similarity threshold. 0.7+ indicates strong semantic relevance.
+
+# =============================================================================
+# Vector Pipeline Feature Flag
+# =============================================================================
+
+VECTOR_PIPELINE_ENABLED = os.getenv("VECTOR_PIPELINE_ENABLED", "false").lower() == "true"
+# Why false by default: Vector pipeline requires Qdrant + Redis infrastructure.
+# Enable in environments where Qdrant is available. When disabled, the workflow
+# falls back to abstract-only extraction (existing behavior).
+# Set VECTOR_PIPELINE_ENABLED=true to activate PDF→chunk→embed→index pipeline.

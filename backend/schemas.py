@@ -207,6 +207,22 @@ class PaperMetadata(BaseModel):
     year: int | None = None
     doi: str | None = None
     pdf_url: str | None = None
+    pdf_object_key: str | None = Field(
+        default=None,
+        description="MinIO object key for downloaded PDF",
+    )
+    pdf_content_hash: str | None = Field(
+        default=None,
+        description="SHA256 hash of PDF URL for cache deduplication",
+    )
+    pdf_downloaded_at: datetime | None = Field(
+        default=None,
+        description="Timestamp when PDF was successfully downloaded to MinIO",
+    )
+    pdf_size_bytes: int | None = Field(
+        default=None,
+        description="Size of downloaded PDF file in bytes",
+    )
     is_approved: bool = False
     core_contribution: str | None = None
     structured_contribution: StructuredContribution | None = None

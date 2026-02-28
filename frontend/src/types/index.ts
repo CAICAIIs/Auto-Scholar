@@ -59,6 +59,10 @@ export interface Paper {
   year: number | null
   doi: string | null
   pdf_url: string | null
+  pdfObjectKey?: string | null
+  pdfContentHash?: string | null
+  pdfDownloadedAt?: string | null
+  pdfSizeBytes?: number | null
   is_approved: boolean
   core_contribution: string | null
   structured_contribution: StructuredContribution | null

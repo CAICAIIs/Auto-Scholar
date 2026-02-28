@@ -38,6 +38,8 @@ export default function Home() {
   const isRegenerating = useResearchStore((s) => s.isRegenerating)
   const setIsRegenerating = useResearchStore((s) => s.setIsRegenerating)
   const setTotalCostUsd = useResearchStore((s) => s.setTotalCostUsd)
+  const appendStreamingToken = useResearchStore((s) => s.appendStreamingToken)
+  const clearStreaming = useResearchStore((s) => s.clearStreaming)
 
   const prevOutputLanguageRef = useRef(outputLanguage)
 
@@ -90,6 +92,7 @@ export default function Home() {
           {
             onMessage: (node, log) => addLog(node, log),
             onCompleted: (data) => {
+              clearStreaming()
               if (data.final_draft) {
                 setDraft(data.final_draft)
                 setCandidatePapers(data.candidate_papers)
@@ -104,12 +107,14 @@ export default function Home() {
               sseCleanupRef.current = null
             },
             onError: (error) => {
+              clearStreaming()
               setError(error)
               addLog("error", error)
               setIsRegenerating(false)
               sseCleanupRef.current = null
             },
             onCostUpdate: (cost) => setTotalCostUsd(cost),
+            onDraftToken: (token) => appendStreamingToken(token),
           },
         )
       })
@@ -119,7 +124,7 @@ export default function Home() {
         addLog("error", errMessage)
         setIsRegenerating(false)
       })
-  }, [outputLanguage, draft, status, isRegenerating, setStatus, addLog, setDraft, setCandidatePapers, setError, selectedModelId, getErrorMessage, setIsRegenerating, addMessage, setTotalCostUsd, t, tConsole])
+  }, [outputLanguage, draft, status, isRegenerating, setStatus, addLog, setDraft, setCandidatePapers, setError, selectedModelId, getErrorMessage, setIsRegenerating, addMessage, setTotalCostUsd, appendStreamingToken, clearStreaming, t, tConsole])
 
   const handleStartResearch = useCallback(async (query: string) => {
     reset()
@@ -184,6 +189,7 @@ export default function Home() {
           onMessage: (node, log) => addLog(node, log),
           onCompleted: (data) => {
             clearProcessingStates()
+            clearStreaming()
             if (data.final_draft) {
               setDraft(data.final_draft)
               setStatus("completed")
@@ -204,11 +210,13 @@ export default function Home() {
           },
           onError: (error) => {
             clearProcessingStates()
+            clearStreaming()
             setError(error)
             addLog("error", error)
             sseCleanupRef.current = null
           },
           onCostUpdate: (cost) => setTotalCostUsd(cost),
+          onDraftToken: (token) => appendStreamingToken(token),
         },
       )
     } catch (err) {
@@ -217,7 +225,7 @@ export default function Home() {
       setError(message)
       addLog("error", message)
     }
-  }, [setStatus, addLog, setApprovedPapers, setDraft, setError, addMessage, startProcessingSimulation, clearProcessingStates, setTotalCostUsd, getErrorMessage, t])
+  }, [setStatus, addLog, setApprovedPapers, setDraft, setError, addMessage, startProcessingSimulation, clearProcessingStates, setTotalCostUsd, appendStreamingToken, clearStreaming, getErrorMessage, t])
 
   const handleContinueResearch = useCallback(async (message: string) => {
     const threadId = useResearchStore.getState().threadId
@@ -243,6 +251,7 @@ export default function Home() {
         {
           onMessage: (node, log) => addLog(node, log),
           onCompleted: (data) => {
+            clearStreaming()
             if (data.final_draft) {
               setDraft(data.final_draft)
               setCandidatePapers(data.candidate_papers)
@@ -263,11 +272,13 @@ export default function Home() {
             sseCleanupRef.current = null
           },
           onError: (error) => {
+            clearStreaming()
             setError(error)
             addLog("error", error)
             sseCleanupRef.current = null
           },
           onCostUpdate: (cost) => setTotalCostUsd(cost),
+          onDraftToken: (token) => appendStreamingToken(token),
         },
       )
     } catch (err) {
@@ -275,7 +286,7 @@ export default function Home() {
       setError(errMessage)
       addLog("error", errMessage)
     }
-  }, [setStatus, addLog, addMessage, setDraft, setCandidatePapers, setError, selectedModelId, setTotalCostUsd, getErrorMessage, t])
+  }, [setStatus, addLog, addMessage, setDraft, setCandidatePapers, setError, selectedModelId, setTotalCostUsd, appendStreamingToken, clearStreaming, getErrorMessage, t])
 
   const handleRetry = useCallback(() => {
     if (lastQuery) {

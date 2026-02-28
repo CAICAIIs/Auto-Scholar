@@ -17,9 +17,11 @@ from backend.constants import (
     MAX_KEYWORDS,
     MIN_ENTAILMENT_RATIO,
     PAPERS_PER_QUERY,
+    VECTOR_PIPELINE_ENABLED,
     get_draft_max_tokens,
     get_section_max_tokens,
 )
+from backend.evaluation.pdf_metrics import get_pdf_stats
 from backend.prompts import (
     CONTRIBUTION_EXTRACTION_SYSTEM,
     CONTRIBUTION_EXTRACTION_USER,
@@ -393,6 +395,58 @@ async def extractor_agent(state: AgentState) -> dict[str, Any]:
         pdf_log = f"Found full-text PDFs for {pdf_count}/{len(extracted)} papers"
         logger.info("extractor_agent: %s", pdf_log)
         logs.append(pdf_log)
+
+    # Download PDFs to MinIO (Phase 1: Object Storage)
+    papers_with_urls = [p for p in extracted if p.pdf_url and not p.pdf_object_key]
+    if papers_with_urls:
+        logger.info(
+            "extractor_agent: %d papers ready for PDF download",
+            len(papers_with_urls),
+        )
+
+        if VECTOR_PIPELINE_ENABLED:
+            try:
+                from backend.utils.vector_pipeline import run_vector_pipeline
+
+                embedder = state.get("embedder")
+                vector_store = state.get("vector_store")
+
+                if embedder and vector_store:
+                    pipeline_summary = await run_vector_pipeline(
+                        papers=extracted,
+                        embedder=embedder,
+                        vector_store=vector_store,
+                    )
+                    pipeline_log = (
+                        f"Vector pipeline: {pipeline_summary.successful}/"
+                        f"{pipeline_summary.total_papers} papers indexed, "
+                        f"{pipeline_summary.total_chunks} chunks in "
+                        f"{pipeline_summary.total_duration_ms:.0f}ms"
+                    )
+                    logger.info("extractor_agent: %s", pipeline_log)
+                    logs.append(pipeline_log)
+                else:
+                    logger.warning(
+                        "extractor_agent: VECTOR_PIPELINE_ENABLED but "
+                        "embedder/vector_store not in state"
+                    )
+            except Exception as e:
+                logger.warning("extractor_agent: vector pipeline failed, continuing: %s", e)
+
+        stats = get_pdf_stats()
+        if stats:
+            logger.info(
+                "extractor_agent: PDF download stats - "
+                "attempts=%d, cache_hits=%d (%.1f%%), successful=%d (%.1f%%), "
+                "total_size=%.2f MB, avg_duration=%.0f ms",
+                stats["total_attempts"],
+                stats["cache_hits"],
+                stats["cache_hit_rate"] * 100,
+                stats["successful"],
+                stats["success_rate"] * 100,
+                stats["total_bytes_downloaded"] / (1024 * 1024),
+                stats["avg_duration_ms"],
+            )
 
     return {
         "approved_papers": approved,

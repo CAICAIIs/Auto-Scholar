@@ -50,6 +50,8 @@ interface ResearchState {
   processingStartTime: number | null
   isRegenerating: boolean
   totalCostUsd: number
+  streamingText: string
+  isStreaming: boolean
   
   setThreadId: (id: string | null) => void
   setStatus: (status: WorkflowStatus) => void
@@ -85,6 +87,8 @@ interface ResearchState {
   
   setIsRegenerating: (regenerating: boolean) => void
   setTotalCostUsd: (cost: number) => void
+  appendStreamingToken: (token: string) => void
+  clearStreaming: () => void
   
   reset: () => void
 }
@@ -185,6 +189,8 @@ const initialState = {
   processingStartTime: null as number | null,
   isRegenerating: false,
   totalCostUsd: 0,
+  streamingText: "",
+  isStreaming: false,
 }
 
 const hydratedState = restoredState ? { ...initialState, ...restoredState } : initialState
@@ -354,6 +360,13 @@ export const useResearchStore = create<ResearchState>((set, get) => ({
   setIsRegenerating: (regenerating: boolean) => set({ isRegenerating: regenerating }),
 
   setTotalCostUsd: (cost) => set({ totalCostUsd: cost }),
+
+  appendStreamingToken: (token) => set((state) => ({
+    streamingText: state.streamingText + token,
+    isStreaming: true,
+  })),
+
+  clearStreaming: () => set({ streamingText: "", isStreaming: false }),
 
   reset: () => set(initialState),
 }))

@@ -216,4 +216,42 @@ describe('useResearchStore', () => {
       expect(state.searchSources).toEqual(['semantic_scholar', 'arxiv', 'pubmed'])
     })
   })
+
+  describe('streaming draft', () => {
+    it('has correct initial streaming state', () => {
+      const state = useResearchStore.getState()
+      expect(state.streamingText).toBe('')
+      expect(state.isStreaming).toBe(false)
+    })
+
+    it('appends tokens and sets isStreaming', () => {
+      useResearchStore.getState().appendStreamingToken('Hello')
+      const state = useResearchStore.getState()
+      expect(state.streamingText).toBe('Hello')
+      expect(state.isStreaming).toBe(true)
+    })
+
+    it('accumulates multiple tokens', () => {
+      useResearchStore.getState().appendStreamingToken('Hello')
+      useResearchStore.getState().appendStreamingToken(' ')
+      useResearchStore.getState().appendStreamingToken('World')
+      expect(useResearchStore.getState().streamingText).toBe('Hello World')
+    })
+
+    it('clears streaming state', () => {
+      useResearchStore.getState().appendStreamingToken('some text')
+      useResearchStore.getState().clearStreaming()
+      const state = useResearchStore.getState()
+      expect(state.streamingText).toBe('')
+      expect(state.isStreaming).toBe(false)
+    })
+
+    it('reset clears streaming state', () => {
+      useResearchStore.getState().appendStreamingToken('some text')
+      useResearchStore.getState().reset()
+      const state = useResearchStore.getState()
+      expect(state.streamingText).toBe('')
+      expect(state.isStreaming).toBe(false)
+    })
+  })
 })
