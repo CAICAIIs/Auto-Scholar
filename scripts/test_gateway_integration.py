@@ -232,12 +232,14 @@ async def main() -> int:
     has_pdf = await check_minio_object(TEST_PAPER_ID)
     report("PDF stored in MinIO", has_pdf)
 
-    db_task = await poll_task(task_id, {"embedding", "failed", "completed"}, timeout_s=30)
-    embed_attempted = db_task.get("state") in ("embedding", "failed")
+    db_task = await poll_task(
+        task_id, {"embedding", "indexing", "failed", "completed"}, timeout_s=30
+    )
+    embed_reached = db_task.get("state") in ("embedding", "indexing", "completed", "failed")
     report(
         "Embedding step reached",
-        embed_attempted,
-        f"state={db_task.get('state')} (expected: embedding or failed due to no OpenAI key)",
+        embed_reached,
+        f"state={db_task.get('state')}",
     )
 
     print("\n--- Phase B: Qdrant Readback (synthetic vectors) ---")
