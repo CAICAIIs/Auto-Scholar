@@ -2,6 +2,7 @@ services:
   # PostgreSQL - Metadata storage
   postgres:
     image: postgres:16-alpine
+    profiles: ["core"]
     environment:
       POSTGRES_DB: ${POSTGRES_DB:-autoscholar}
       POSTGRES_USER: ${POSTGRES_USER:-autoscholar}
@@ -20,6 +21,7 @@ services:
   # Redis - Caching layer
   redis:
     image: redis:7-alpine
+    profiles: ["core"]
     ports:
       - "${REDIS_PORT:-6379}:6379"
     command: redis-server --appendonly yes ${REDIS_PASSWORD:+--requirepass $REDIS_PASSWORD}
@@ -35,6 +37,7 @@ services:
   # MinIO - Object storage for PDFs
   minio:
     image: minio/minio:latest
+    profiles: ["rag"]
     ports:
       - "${MINIO_PORT:-9000}:9000"
       - "${MINIO_CONSOLE_PORT:-9001}:9001"
@@ -54,6 +57,7 @@ services:
   # Qdrant - Vector database
   qdrant:
     image: qdrant/qdrant:latest
+    profiles: ["rag"]
     ports:
       - "${QDRANT_PORT:-6333}:6333"
       - "${QDRANT_GRPC_PORT:-6334}:6334"
@@ -70,6 +74,7 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
+    profiles: ["app"]
     ports:
       - "8000:8000"
     environment:
@@ -106,8 +111,10 @@ services:
         condition: service_healthy
       minio:
         condition: service_healthy
+        required: false
       qdrant:
         condition: service_healthy
+        required: false
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8000/docs"]
       interval: 30s
@@ -122,6 +129,7 @@ services:
       dockerfile: Dockerfile
       args:
         - NEXT_PUBLIC_API_URL=http://localhost:8000
+    profiles: ["app"]
     ports:
       - "3000:3000"
     depends_on:

@@ -203,6 +203,8 @@ def _build_chunk_payloads(
             "token_count": chunk.token_count,
             "start_char": chunk.start_char,
             "end_char": chunk.end_char,
+            "page_start": chunk.page_start,
+            "page_end": chunk.page_end,
         }
         payloads.append(payload)
     return payloads

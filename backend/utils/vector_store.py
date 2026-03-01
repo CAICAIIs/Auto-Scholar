@@ -172,6 +172,20 @@ class QdrantVectorStore:
             logger.error("Failed to delete chunks for paper_id=%s: %s", paper_id, str(e))
             raise VectorStoreError(f"Deletion failed: {e}") from e
 
+    async def count_by_paper_id(self, paper_id: str) -> int:
+        try:
+            count_result = await self.client.count(
+                collection_name=self.collection_name,
+                count_filter=Filter(
+                    must=[FieldCondition(key="paper_id", match=MatchValue(value=paper_id))]
+                ),
+                exact=True,
+            )
+            return count_result.count
+        except Exception as e:
+            logger.warning("count_by_paper_id failed for %s: %s", paper_id, e)
+            return 0
+
     async def get_collection_info(self) -> dict[str, Any]:
         try:
             info = await self.client.get_collection(collection_name=self.collection_name)

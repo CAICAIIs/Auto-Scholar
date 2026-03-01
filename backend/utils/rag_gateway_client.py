@@ -1,4 +1,5 @@
 import logging
+import time
 from typing import Any
 
 import aiohttp
@@ -8,21 +9,37 @@ from backend.schemas import PaperMetadata
 
 logger = logging.getLogger(__name__)
 
+_CIRCUIT_COOLDOWN = 120.0
+_circuit_open_until: float = 0.0
+
 
 class GatewayError(Exception):
     pass
 
 
+def _is_circuit_open() -> bool:
+    return time.monotonic() < _circuit_open_until
+
+
+def _trip_circuit() -> None:
+    global _circuit_open_until
+    _circuit_open_until = time.monotonic() + _CIRCUIT_COOLDOWN
+    logger.warning("rag_gateway: circuit breaker tripped, skipping for %.0fs", _CIRCUIT_COOLDOWN)
+
+
+def _reset_circuit() -> None:
+    global _circuit_open_until
+    _circuit_open_until = 0.0
+
+
 async def submit_papers_to_gateway(
     papers: list[PaperMetadata],
 ) -> list[dict[str, Any]]:
-    """Submit papers to the RAG ingestion gateway for async processing.
-
-    Calls POST /api/v1/ingest/batch with paper_id + source_url pairs.
-    Returns list of per-paper results with task_id or error.
-    """
     if not RAG_GATEWAY_URL:
         raise GatewayError("RAG_GATEWAY_URL not configured")
+
+    if _is_circuit_open():
+        raise GatewayError("circuit breaker open — gateway recently failed")
 
     items = []
     for p in papers:
@@ -53,16 +70,22 @@ async def submit_papers_to_gateway(
                         submitted,
                         failed,
                     )
+                    _reset_circuit()
                     return results
 
                 body = await resp.text()
+                _trip_circuit()
                 raise GatewayError(f"gateway returned {resp.status}: {body[:200]}")
     except aiohttp.ClientError as e:
+        _trip_circuit()
         raise GatewayError(f"gateway connection failed: {e}") from e
 
 
 async def check_gateway_health() -> bool:
     if not RAG_GATEWAY_URL:
+        return False
+
+    if _is_circuit_open():
         return False
 
     url = f"{RAG_GATEWAY_URL.rstrip('/')}/api/v1/health"

@@ -1,0 +1,22 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "QdrantChunkPayload",
+  "description": "Qdrant point payload for paper_chunks collection. Written by gateway/inline pipeline, read by claim_verifier.",
+  "type": "object",
+  "required": ["paper_id", "title", "chunk_index", "chunk_text", "token_count", "start_char", "end_char"],
+  "properties": {
+    "paper_id":    { "type": "string" },
+    "title":       { "type": "string" },
+    "authors":     { "type": "array", "items": { "type": "string" } },
+    "year":        { "type": ["integer", "null"] },
+    "source":      { "type": "string" },
+    "chunk_index": { "type": "integer", "minimum": 0 },
+    "chunk_text":  { "type": "string", "minLength": 1 },
+    "token_count": { "type": "integer", "minimum": 0 },
+    "start_char":  { "type": "integer", "minimum": 0 },
+    "end_char":    { "type": "integer", "minimum": 0 },
+    "page_start":  { "type": ["integer", "null"] },
+    "page_end":    { "type": ["integer", "null"] }
+  },
+  "additionalProperties": false
+}

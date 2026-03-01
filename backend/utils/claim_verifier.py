@@ -2,6 +2,7 @@ import asyncio
 import json
 import logging
 import re
+import time
 from typing import Any
 
 from pydantic import BaseModel
@@ -210,6 +211,24 @@ def _get_paper_by_index(papers: list[PaperMetadata], index: int) -> PaperMetadat
     return None
 
 
+async def _wait_for_vectors(
+    vector_store: Any,
+    paper_id: str,
+    timeout_s: float = 15.0,
+    poll_interval: float = 2.0,
+) -> bool:
+    deadline = time.monotonic() + timeout_s
+    while time.monotonic() < deadline:
+        try:
+            count = await vector_store.count_by_paper_id(paper_id)
+            if count > 0:
+                return True
+        except Exception:
+            pass
+        await asyncio.sleep(poll_interval)
+    return False
+
+
 async def verify_single_claim(
     claim: Claim,
     citation_index: int,
@@ -219,34 +238,42 @@ async def verify_single_claim(
     paper_context = paper.abstract[:1000] if paper.abstract else ""
 
     if vector_store is not None:
-        try:
-            from backend.utils.clients import get_embedder
+        has_vectors = await _wait_for_vectors(vector_store, paper.paper_id)
+        if not has_vectors:
+            logger.info("No vectors for paper %s after polling, using abstract", paper.paper_id)
+        else:
+            try:
+                from backend.utils.clients import get_embedder
 
-            embedder = await get_embedder()
-            if embedder:
-                claim_embedding = await embedder.embed_text(claim.text)
+                embedder = await get_embedder()
+                if embedder:
+                    claim_embedding = await embedder.embed_text(claim.text)
 
-                search_results = await vector_store.search(
-                    query_vector=claim_embedding,
-                    limit=5,
-                    score_threshold=0.7,
-                    filter_dict={"must": [{"key": "paper_id", "match": {"value": paper.paper_id}}]},
-                )
+                    search_results = await vector_store.search(
+                        query_vector=claim_embedding,
+                        limit=5,
+                        score_threshold=0.7,
+                        filter_dict={
+                            "must": [{"key": "paper_id", "match": {"value": paper.paper_id}}]
+                        },
+                    )
 
-                if search_results:
-                    relevant_chunks = []
-                    for result in search_results:
-                        chunk_text = result["payload"].get("chunk_text", "")
-                        page_start = result["payload"].get("page_start")
-                        page_end = result["payload"].get("page_end")
-                        if chunk_text:
-                            page_info = f" (pages {page_start}-{page_end})" if page_start else ""
-                            relevant_chunks.append(f"{chunk_text}{page_info}")
+                    if search_results:
+                        relevant_chunks = []
+                        for result in search_results:
+                            chunk_text = result["payload"].get("chunk_text", "")
+                            page_start = result["payload"].get("page_start")
+                            page_end = result["payload"].get("page_end")
+                            if chunk_text:
+                                page_info = (
+                                    f" (pages {page_start}-{page_end})" if page_start else ""
+                                )
+                                relevant_chunks.append(f"{chunk_text}{page_info}")
 
-                    if relevant_chunks:
-                        paper_context = "\n\n".join(relevant_chunks[:3])
-        except Exception as e:
-            logger.warning("Failed to retrieve full-text context: %s", e)
+                        if relevant_chunks:
+                            paper_context = "\n\n".join(relevant_chunks[:3])
+            except Exception as e:
+                logger.warning("Failed to retrieve full-text context: %s", e)
 
     result = await structured_completion(
         messages=[

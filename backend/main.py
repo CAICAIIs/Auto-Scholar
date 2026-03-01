@@ -588,3 +588,65 @@ async def submit_rating(rating: HumanRating):
 @app.get("/api/ratings/{thread_id}", response_model=list[HumanRating])
 async def get_ratings(thread_id: str):
     return get_ratings_for_thread(thread_id)
+
+
+@app.get("/api/debug/ingestion/{paper_id}")
+async def debug_ingestion(paper_id: str):
+    checks: dict[str, Any] = {}
+
+    try:
+        from backend.utils.rag_gateway_client import check_gateway_health
+
+        checks["gateway_healthy"] = await check_gateway_health()
+    except Exception as e:
+        checks["gateway_healthy"] = None
+        checks["gateway_error"] = str(e)
+
+    try:
+        from backend.utils.clients import get_minio_client
+
+        minio = get_minio_client()
+        if minio:
+            from backend.constants import MINIO_BUCKET_RAW
+
+            objects = list(
+                minio.list_objects(MINIO_BUCKET_RAW, prefix=f"{paper_id}/", recursive=True)
+            )
+            checks["minio_pdf_exists"] = len(objects) > 0
+            checks["minio_pdf_count"] = len(objects)
+        else:
+            checks["minio_pdf_exists"] = None
+            checks["minio_note"] = "VECTOR_PIPELINE_ENABLED=false"
+    except Exception as e:
+        checks["minio_pdf_exists"] = None
+        checks["minio_error"] = str(e)
+
+    try:
+        from backend.utils.clients import get_vector_store
+
+        vs = await get_vector_store()
+        if vs:
+            count = await vs.count_by_paper_id(paper_id)
+            checks["qdrant_chunk_count"] = count
+        else:
+            checks["qdrant_chunk_count"] = None
+            checks["qdrant_note"] = "VECTOR_PIPELINE_ENABLED=false"
+    except Exception as e:
+        checks["qdrant_chunk_count"] = None
+        checks["qdrant_error"] = str(e)
+
+    try:
+        from backend.utils.clients import get_redis_client
+
+        redis = await get_redis_client()
+        if redis:
+            keys = await redis.keys(f"emb:*{paper_id}*")
+            checks["redis_cache_keys"] = len(keys)
+        else:
+            checks["redis_cache_keys"] = None
+            checks["redis_note"] = "VECTOR_PIPELINE_ENABLED=false"
+    except Exception as e:
+        checks["redis_cache_keys"] = None
+        checks["redis_error"] = str(e)
+
+    return {"paper_id": paper_id, "checks": checks}
