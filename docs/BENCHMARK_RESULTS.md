@@ -24,9 +24,9 @@ Goal: Verify that gateway PDF processing does NOT increase auto-scholar memory.
 
 | Paper | Pages | Result | Total Time |
 |-------|-------|--------|------------|
-| Attention Is All You Need (1706.03762) | ~15 | completed | 4.54s |
-| LLaMA (2302.13971) | ~30 | indexing (Qdrant UTF-8 error) | 2.93s to embedding |
-| GPT-4 (2303.08774) | ~100 | failed (download timeout → zombie recovery → Qdrant UTF-8 error) | 6m03s |
+| Attention Is All You Need (1706.03762) | ~15 | completed | 4.54s, 19 chunks |
+| LLaMA (2302.13971) | ~30 | completed (after UTF-8 fix) | 5.76s, 42 chunks |
+| GPT-4 (2303.08774) | ~100 | completed (after UTF-8 fix) | 6.87s, 53 chunks |
 
 ### Memory Measurements
 
@@ -70,16 +70,27 @@ Goal: Measure per-stage latency of the ingestion pipeline.
 | indexing → completed | 1.76s | Qdrant upsert 19 points |
 | **Total** | **4.54s** | |
 
-### LLaMA (30 pages)
+### LLaMA (30 pages, 42 chunks) — after UTF-8 fix
 
 | Stage | Duration | Notes |
 |-------|----------|-------|
-| pending → downloading | 1.04s | |
-| downloading → chunking | 1.37s | Faster download than Attention paper |
-| chunking → embedding | 0.01s | |
-| embedding → indexing | 0.50s | |
-| indexing → ? | stuck | Qdrant UTF-8 error (see Bugs Found) |
-| **Total to embedding** | **2.93s** | |
+| pending → downloading | 0.71s | |
+| downloading → chunking | 2.30s | PDF download + parse |
+| chunking → embedding | 0.04s | Text chunking |
+| embedding → indexing | 0.76s | MiniMaxi API call for 42 chunks |
+| indexing → completed | 1.94s | Qdrant upsert 42 points |
+| **Total** | **5.76s** | |
+
+### GPT-4 (100 pages, 53 chunks) — after UTF-8 fix
+
+| Stage | Duration | Notes |
+|-------|----------|-------|
+| pending → downloading | 0.75s | |
+| downloading → chunking | 3.13s | 5.2 MB PDF download + parse |
+| chunking → embedding | 0.01s | Text chunking |
+| embedding → indexing | 0.73s | MiniMaxi API call for 53 chunks |
+| indexing → completed | 2.25s | Qdrant upsert 53 points |
+| **Total** | **6.87s** | |
 
 ### Bottleneck Analysis
 
@@ -189,9 +200,9 @@ Contract schema (`contracts/qdrant_payload.schema.json`) validates:
 - claim_verifier only reads fields defined in schema
 - Schema itself is valid JSON Schema Draft 2020-12
 
-## Bugs Found During Testing
+## Bugs Found & Fixed During Testing
 
-### 1. Qdrant UTF-8 Error on Some PDFs
+### 1. Qdrant UTF-8 Error on Some PDFs — FIXED
 
 ```
 step indexing: upsert to qdrant: qdrant upsert: rpc error: code = Internal
@@ -199,24 +210,27 @@ desc = grpc: error while marshaling: string field contains invalid UTF-8
 ```
 
 Affected: GPT-4 paper (2303.08774), LLaMA paper (2302.13971)
-Root cause: Gateway's PDF text extraction produces invalid UTF-8 characters that Qdrant's gRPC rejects.
-Fix needed: Add UTF-8 sanitization in gateway's chunker before Qdrant upsert.
+Root cause: `ledongthuc/pdf` library extracts text with invalid UTF-8 bytes from some PDFs. Qdrant's gRPC protobuf marshaling rejects these.
+Fix: Added `sanitizeUTF8()` in `pipeline.go` after `extractTextFromPDF()` to strip invalid bytes. Also fixed `chunker.go` to use rune-aware boundary detection (`utf8.DecodeLastRuneInString`) instead of raw byte indexing (`rune(text[i])`), and added `alignRuneBoundary()` to prevent chunk splits in the middle of multi-byte characters.
+Commit: `3175922` (rag-ingestion-gateway)
+Retest: Both papers completed successfully after fix (LLaMA: 5.76s/42 chunks, GPT-4: 6.87s/53 chunks).
 
 ### 2. Zombie Recovery on Long Downloads
 
-The GPT-4 paper download took >5 minutes, triggering the gateway's heartbeat timeout.
-The task was recovered as "zombie" and retried, which is correct behavior.
-However, the retry also failed at Qdrant (same UTF-8 issue).
+The GPT-4 paper download took >5 minutes on first attempt, triggering the gateway's heartbeat timeout.
+The task was recovered as "zombie" and retried — correct behavior.
+After UTF-8 fix, the retry path also works correctly (GPT-4 completed in 6.87s on retest).
 
 ## Summary
 
 | Scenario | Result | Key Metric |
 |----------|--------|------------|
 | Memory Isolation | PASS | Uvicorn: constant 2.6-3.7 MB during all PDF processing |
-| Pipeline Throughput | PASS | 4.54s end-to-end for 15-page paper (19 chunks) |
+| Pipeline Throughput | PASS | 4.54s (15p), 5.76s (30p), 6.87s (100p) end-to-end |
 | Circuit Breaker | PASS | 50,000x faster failure (2ms → 0.0ms after first trip) |
 | Debug Endpoint | PASS | One-stop diagnosis across 4 infrastructure services |
 | Contract Tests | PASS | 4/4 tests, schema validates both writer and reader |
+| UTF-8 Bug Fix | FIXED | GPT-4 + LLaMA papers now complete successfully |
 
 ## How to Reproduce
 
