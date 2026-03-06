@@ -1,4 +1,5 @@
 import type { StartRequest, StartResponse, ApproveRequest, ApproveResponse, StatusResponse, DraftOutput, Paper, SessionSummary, SessionDetail, PaperSource, ContinueRequest, ContinueResponse, ModelConfig } from "@/types"
+import { parseSSEEventLine, parseSSELines, type SSECallbacks } from "./sse"
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000"
 
@@ -131,19 +132,6 @@ export async function exportReview(
   return res.blob()
 }
 
-export interface SSECompletedData {
-  final_draft: DraftOutput | null
-  candidate_papers: Paper[]
-}
-
-export interface SSECallbacks {
-  onMessage: (node: string, log: string) => void
-  onCompleted: (data: SSECompletedData) => void
-  onError: (error: string) => void
-  onCostUpdate?: (totalCostUsd: number) => void
-  onDraftToken?: (token: string) => void
-}
-
 export function createSSEConnection(
   threadId: string,
   callbacks: SSECallbacks
@@ -151,43 +139,41 @@ export function createSSEConnection(
   const eventSource = new EventSource(`${API_BASE}/api/research/stream/${threadId}`)
 
   eventSource.onmessage = (event) => {
-    // Backend debounce queue may concatenate multiple JSON objects per SSE message.
-    // Split by newlines and parse each independently.
-    const lines = event.data.split("\n").filter((l: string) => l.trim())
+    const lines = parseSSELines(event.data)
     for (const line of lines) {
-      try {
-        const data = JSON.parse(line)
-
-        if (data.event === "completed") {
-          callbacks.onCompleted({
-            final_draft: data.final_draft ?? null,
-            candidate_papers: data.candidate_papers ?? [],
-          })
-          eventSource.close()
-          return
-        }
-
-        if (data.event === "error") {
-          callbacks.onError(data.detail || "Unknown error")
-          eventSource.close()
-          return
-        }
-
-        if (data.event === "cost_update") {
-          callbacks.onCostUpdate?.(data.total_cost_usd)
-          continue
-        }
-
-        if (data.event === "draft_token") {
-          callbacks.onDraftToken?.(data.token)
-          continue
-        }
-
-        if (data.node && data.log) {
-          callbacks.onMessage(data.node, data.log)
-        }
-      } catch {
+      const data = parseSSEEventLine(line)
+      if (!data) {
         console.error("Failed to parse SSE line:", line)
+        continue
+      }
+
+      if ("event" in data && (data.event === "done" || data.event === "completed")) {
+        callbacks.onCompleted({
+          final_draft: data.final_draft ?? null,
+          candidate_papers: data.candidate_papers ?? [],
+        })
+        eventSource.close()
+        return
+      }
+
+      if ("event" in data && data.event === "error") {
+        callbacks.onError(data.detail || "Unknown error")
+        eventSource.close()
+        return
+      }
+
+      if ("event" in data && data.event === "cost_update") {
+        callbacks.onCostUpdate?.(data.total_cost_usd)
+        continue
+      }
+
+      if ("event" in data && data.event === "draft_token") {
+        callbacks.onDraftToken?.(data.token)
+        continue
+      }
+
+      if ("node" in data && "log" in data) {
+        callbacks.onMessage(data.node, data.log)
       }
     }
   }
