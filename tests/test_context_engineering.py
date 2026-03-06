@@ -3,18 +3,24 @@ import logging
 from backend.constants import (
     CONTEXT_MAX_PAPERS,
 )
-from backend.nodes import (
-    _build_paper_context,
-    _estimate_paper_tokens,
-    _find_best_keyword_match,
-    _prioritize_by_sub_questions,
-)
 from backend.schemas import (
     PaperMetadata,
     PaperSource,
     ResearchPlan,
     StructuredContribution,
     SubQuestion,
+)
+from backend.services.context import (
+    build_paper_context as _build_paper_context,
+)
+from backend.services.context import (
+    estimate_paper_tokens as _estimate_paper_tokens,
+)
+from backend.services.context import (
+    find_best_keyword_match as _find_best_keyword_match,
+)
+from backend.services.context import (
+    prioritize_by_sub_questions as _prioritize_by_sub_questions,
 )
 
 

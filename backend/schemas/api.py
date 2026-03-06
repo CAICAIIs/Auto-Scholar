@@ -5,9 +5,11 @@ from typing import TYPE_CHECKING
 
 from pydantic import BaseModel, Field
 
+from backend.schemas.domain import PaperMetadata, PaperSource
+from backend.schemas.workflow import ConversationMessage, DraftOutput
+
 if TYPE_CHECKING:
-    from backend.schemas.domain import PaperMetadata, PaperSource
-    from backend.schemas.workflow import ConversationMessage, DraftOutput
+    pass
 
 
 class ModelProvider(StrEnum):
@@ -130,9 +132,6 @@ class SessionDetail(BaseModel):
     logs: list[str]
     messages: list["ConversationMessage"] = []
 
-
-from backend.schemas.domain import PaperMetadata, PaperSource
-from backend.schemas.workflow import ConversationMessage, DraftOutput
 
 StartRequest.model_rebuild()
 StartResponse.model_rebuild()
