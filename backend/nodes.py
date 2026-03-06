@@ -4,13 +4,10 @@ import re
 import time
 from typing import Any
 
-from pydantic import BaseModel
-
 from backend.constants import (
     CLAIM_VERIFICATION_CONCURRENCY,
     CLAIM_VERIFICATION_ENABLED,
     CONTEXT_MAX_PAPERS,
-    CONTEXT_TOKEN_BUDGET,
     FULLTEXT_CONCURRENCY,
     LLM_CONCURRENCY,
     MAX_CONVERSATION_TURNS,
@@ -20,12 +17,12 @@ from backend.constants import (
     RAG_GATEWAY_URL,
     VECTOR_PIPELINE_ENABLED,
     get_draft_max_tokens,
-    get_section_max_tokens,
 )
 from backend.evaluation.pdf_metrics import get_pdf_stats
+from backend.models.internal import (
+    KeywordPlan,
+)
 from backend.prompts import (
-    CONTRIBUTION_EXTRACTION_SYSTEM,
-    CONTRIBUTION_EXTRACTION_USER,
     DRAFT_GENERATION_SYSTEM,
     DRAFT_REFLECTION_RETRY_ADDENDUM,
     DRAFT_RETRY_ADDENDUM,
@@ -33,53 +30,93 @@ from backend.prompts import (
     DRAFT_USER_PROMPT,
     KEYWORD_GENERATION_CONTINUATION,
     KEYWORD_GENERATION_SYSTEM,
-    OUTLINE_GENERATION_SYSTEM,
     PLANNER_COT_SYSTEM,
     REFLECTION_SYSTEM,
     REFLECTION_USER,
-    SECTION_GENERATION_SYSTEM,
-    STRUCTURED_EXTRACTION_SYSTEM,
-    STRUCTURED_EXTRACTION_USER,
 )
 from backend.schemas import (
     ConversationMessage,
-    DraftOutline,
     DraftOutput,
     MessageRole,
-    MethodComparisonEntry,
     PaperMetadata,
     PaperSource,
     Reflection,
     ResearchPlan,
     ReviewSection,
-    StructuredContribution,
 )
+from backend.services.context import (
+    build_paper_context,
+    prioritize_by_sub_questions,
+)
+from backend.services.extraction import extract_contribution
+from backend.services.writing import generate_outline, generate_section
 from backend.state import AgentState
 from backend.utils.claim_verifier import verify_draft_citations
 from backend.utils.fulltext_api import enrich_papers_with_fulltext
 from backend.utils.llm_client import structured_completion
+from backend.utils.rag_gateway_client import GatewayError
 from backend.utils.scholar_api import search_by_plan, search_papers_multi_source
 
 logger = logging.getLogger(__name__)
 
 
-class KeywordPlan(BaseModel):
-    keywords: list[str]
+async def _ingest_papers_for_retrieval(papers: list[PaperMetadata]) -> list[str]:
+    logs: list[str] = []
 
+    if not papers:
+        return logs
 
-class ContributionExtraction(BaseModel):
-    core_contribution: str
+    if RAG_GATEWAY_URL:
+        try:
+            from backend.utils.rag_gateway_client import submit_papers_to_gateway
 
+            results = await submit_papers_to_gateway(papers)
+            accepted = sum(1 for result in results if result.get("status") == 202)
+            gateway_log = (
+                f"RAG gateway: {accepted}/{len(papers)} papers submitted for async ingestion"
+            )
+            logger.info("extractor_agent: %s", gateway_log)
+            logs.append(gateway_log)
+        except GatewayError as exc:
+            logger.warning("extractor_agent: gateway submission failed: %s", exc)
+            logs.append(f"RAG gateway unavailable, skipping ingestion: {exc}")
+        except Exception as exc:
+            logger.warning("extractor_agent: gateway call failed, continuing: %s", exc)
+        return logs
 
-class StructuredExtractionResult(BaseModel):
-    problem: str | None = None
-    method: str | None = None
-    novelty: str | None = None
-    dataset: str | None = None
-    baseline: str | None = None
-    results: str | None = None
-    limitations: str | None = None
-    future_work: str | None = None
+    if not VECTOR_PIPELINE_ENABLED:
+        return logs
+
+    try:
+        from backend.utils.clients import get_embedder, get_vector_store
+        from backend.utils.vector_pipeline import run_vector_pipeline
+
+        embedder = await get_embedder()
+        vector_store = await get_vector_store()
+
+        if embedder and vector_store:
+            pipeline_summary = await run_vector_pipeline(
+                papers=papers,
+                embedder=embedder,
+                vector_store=vector_store,
+            )
+            pipeline_log = (
+                f"Vector pipeline: {pipeline_summary.successful}/"
+                f"{pipeline_summary.total_papers} papers indexed, "
+                f"{pipeline_summary.total_chunks} chunks in "
+                f"{pipeline_summary.total_duration_ms:.0f}ms"
+            )
+            logger.info("extractor_agent: %s", pipeline_log)
+            logs.append(pipeline_log)
+        else:
+            logger.warning(
+                "extractor_agent: VECTOR_PIPELINE_ENABLED but failed to initialize "
+                "embedder/vector_store"
+            )
+    except Exception as exc:
+        logger.warning("extractor_agent: vector pipeline failed, continuing: %s", exc)
+
+    return logs
 
 
 def _build_conversation_context(
@@ -238,63 +275,6 @@ async def retriever_agent(state: AgentState) -> dict[str, Any]:
     }
 
 
-async def _extract_contribution(paper: PaperMetadata) -> PaperMetadata:
-    core_task = structured_completion(
-        messages=[
-            {"role": "system", "content": CONTRIBUTION_EXTRACTION_SYSTEM},
-            {
-                "role": "user",
-                "content": CONTRIBUTION_EXTRACTION_USER.format(
-                    title=paper.title,
-                    year=paper.year,
-                    abstract=paper.abstract,
-                ),
-            },
-        ],
-        response_model=ContributionExtraction,
-        task_type="extraction",
-    )
-
-    structured_task = structured_completion(
-        messages=[
-            {"role": "system", "content": STRUCTURED_EXTRACTION_SYSTEM},
-            {
-                "role": "user",
-                "content": STRUCTURED_EXTRACTION_USER.format(
-                    title=paper.title,
-                    year=paper.year,
-                    abstract=paper.abstract,
-                ),
-            },
-        ],
-        response_model=StructuredExtractionResult,
-        task_type="extraction",
-    )
-
-    core_result, structured_result = await asyncio.gather(core_task, structured_task)
-
-    if not core_result.core_contribution or not core_result.core_contribution.strip():
-        raise ValueError("LLM returned empty core_contribution")
-
-    structured_contrib = StructuredContribution(
-        problem=structured_result.problem or None,
-        method=structured_result.method or None,
-        novelty=structured_result.novelty or None,
-        dataset=structured_result.dataset or None,
-        baseline=structured_result.baseline or None,
-        results=structured_result.results or None,
-        limitations=structured_result.limitations or None,
-        future_work=structured_result.future_work or None,
-    )
-
-    return paper.model_copy(
-        update={
-            "core_contribution": core_result.core_contribution,
-            "structured_contribution": structured_contrib,
-        }
-    )
-
-
 async def extractor_agent(state: AgentState) -> dict[str, Any]:
     candidates = state.get("candidate_papers", [])
     approved = [p for p in candidates if p.is_approved]
@@ -312,7 +292,7 @@ async def extractor_agent(state: AgentState) -> dict[str, Any]:
 
     research_plan = state.get("research_plan")
     if research_plan and research_plan.sub_questions:
-        approved_ordered = _prioritize_by_sub_questions(approved, research_plan)
+        approved_ordered = prioritize_by_sub_questions(approved, research_plan)
     else:
         approved_ordered = approved
 
@@ -330,7 +310,7 @@ async def extractor_agent(state: AgentState) -> dict[str, Any]:
 
     async def extract_with_limit(paper: PaperMetadata) -> PaperMetadata:
         async with semaphore:
-            return await _extract_contribution(paper)
+            return await extract_contribution(paper)
 
     async def _safe_enrich(papers: list[PaperMetadata]) -> list[PaperMetadata] | None:
         try:
@@ -404,57 +384,7 @@ async def extractor_agent(state: AgentState) -> dict[str, Any]:
             "extractor_agent: %d papers ready for PDF ingestion",
             len(papers_with_urls),
         )
-
-        if RAG_GATEWAY_URL:
-            try:
-                from backend.utils.rag_gateway_client import (
-                    GatewayError,
-                    submit_papers_to_gateway,
-                )
-
-                results = await submit_papers_to_gateway(papers_with_urls)
-                accepted = sum(1 for r in results if r.get("status") == 202)
-                gateway_log = (
-                    f"RAG gateway: {accepted}/{len(papers_with_urls)} papers "
-                    f"submitted for async ingestion"
-                )
-                logger.info("extractor_agent: %s", gateway_log)
-                logs.append(gateway_log)
-            except GatewayError as e:
-                logger.warning("extractor_agent: gateway submission failed: %s", e)
-                logs.append(f"RAG gateway unavailable, skipping ingestion: {e}")
-            except Exception as e:
-                logger.warning("extractor_agent: gateway call failed, continuing: %s", e)
-
-        elif VECTOR_PIPELINE_ENABLED:
-            try:
-                from backend.utils.clients import get_embedder, get_vector_store
-                from backend.utils.vector_pipeline import run_vector_pipeline
-
-                embedder = await get_embedder()
-                vector_store = await get_vector_store()
-
-                if embedder and vector_store:
-                    pipeline_summary = await run_vector_pipeline(
-                        papers=extracted,
-                        embedder=embedder,
-                        vector_store=vector_store,
-                    )
-                    pipeline_log = (
-                        f"Vector pipeline: {pipeline_summary.successful}/"
-                        f"{pipeline_summary.total_papers} papers indexed, "
-                        f"{pipeline_summary.total_chunks} chunks in "
-                        f"{pipeline_summary.total_duration_ms:.0f}ms"
-                    )
-                    logger.info("extractor_agent: %s", pipeline_log)
-                    logs.append(pipeline_log)
-                else:
-                    logger.warning(
-                        "extractor_agent: VECTOR_PIPELINE_ENABLED but "
-                        "failed to initialize embedder/vector_store"
-                    )
-            except Exception as e:
-                logger.warning("extractor_agent: vector pipeline failed, continuing: %s", e)
+        logs.extend(await _ingest_papers_for_retrieval(papers_with_urls))
 
         stats = get_pdf_stats()
         if stats:
@@ -480,206 +410,6 @@ async def extractor_agent(state: AgentState) -> dict[str, Any]:
     }
 
 
-def _estimate_paper_tokens(paper: PaperMetadata) -> int:
-    parts = [paper.title, paper.core_contribution or ""]
-    sc = paper.structured_contribution
-    if sc:
-        for field in (
-            sc.problem,
-            sc.method,
-            sc.novelty,
-            sc.dataset,
-            sc.baseline,
-            sc.results,
-            sc.limitations,
-            sc.future_work,
-        ):
-            if field:
-                parts.append(field)
-    elif paper.abstract:
-        parts.append(paper.abstract[:200])
-    text = " ".join(parts)
-    return max(int(len(text.split()) * 1.3), 20)
-
-
-def _prioritize_by_sub_questions(
-    papers: list[PaperMetadata],
-    research_plan: ResearchPlan,
-) -> list[PaperMetadata]:
-    reserved: list[PaperMetadata] = []
-    remaining = list(papers)
-
-    for sq in sorted(research_plan.sub_questions, key=lambda s: s.priority):
-        best = _find_best_keyword_match(remaining, sq.keywords)
-        if best:
-            reserved.append(best)
-            remaining.remove(best)
-
-    return reserved + remaining
-
-
-def _find_best_keyword_match(
-    papers: list[PaperMetadata],
-    keywords: list[str],
-) -> PaperMetadata | None:
-    if not papers or not keywords:
-        return None
-    lower_keywords = [k.lower() for k in keywords]
-
-    def score(p: PaperMetadata) -> int:
-        title_lower = p.title.lower()
-        return sum(1 for kw in lower_keywords if kw in title_lower)
-
-    scored = [(score(p), p) for p in papers]
-    scored.sort(key=lambda x: x[0], reverse=True)
-    return scored[0][1] if scored[0][0] > 0 else papers[0]
-
-
-def _build_paper_context(
-    papers: list[PaperMetadata],
-    token_budget: int = CONTEXT_TOKEN_BUDGET,
-) -> str:
-    if not papers:
-        return ""
-
-    if len(papers) > CONTEXT_MAX_PAPERS:
-        logger.warning(
-            "paper count %d exceeds hard limit %d, truncating (legacy data?)",
-            len(papers),
-            CONTEXT_MAX_PAPERS,
-        )
-        papers = papers[:CONTEXT_MAX_PAPERS]
-
-    selected: list[PaperMetadata] = []
-    estimated_tokens = 0
-    for p in papers:
-        paper_tokens = _estimate_paper_tokens(p)
-        if estimated_tokens + paper_tokens > token_budget and selected:
-            logger.info(
-                "context budget reached: %d/%d tokens, %d/%d papers included",
-                estimated_tokens,
-                token_budget,
-                len(selected),
-                len(papers),
-            )
-            break
-        selected.append(p)
-        estimated_tokens += paper_tokens
-
-    lines: list[str] = []
-    for i, p in enumerate(selected, 1):
-        paper_info = [
-            f"[{i}] {p.title} (Year: {p.year or 'N/A'})",
-            f"    Authors: {', '.join(p.authors[:3])}{'...' if len(p.authors) > 3 else ''}",
-            f"    Contribution: {p.core_contribution}",
-        ]
-
-        sc = p.structured_contribution
-        if sc:
-            if sc.problem:
-                paper_info.append(f"    Problem: {sc.problem}")
-            if sc.method:
-                paper_info.append(f"    Method: {sc.method}")
-            if sc.novelty:
-                paper_info.append(f"    Novelty: {sc.novelty}")
-            if sc.dataset:
-                paper_info.append(f"    Dataset: {sc.dataset}")
-            if sc.baseline:
-                paper_info.append(f"    Baseline: {sc.baseline}")
-            if sc.results:
-                paper_info.append(f"    Results: {sc.results}")
-            if sc.limitations:
-                paper_info.append(f"    Limitations: {sc.limitations}")
-            if sc.future_work:
-                paper_info.append(f"    Future Work: {sc.future_work}")
-        elif p.abstract:
-            abstract_preview = p.abstract[:200] + "..." if len(p.abstract) > 200 else p.abstract
-            paper_info.append(f"    Abstract: {abstract_preview}")
-
-        lines.append("\n".join(paper_info))
-    return "\n\n".join(lines)
-
-
-def build_comparison_table(papers: list[PaperMetadata]) -> list[MethodComparisonEntry]:
-    entries: list[MethodComparisonEntry] = []
-    for i, p in enumerate(papers, 1):
-        sc = p.structured_contribution
-        title = p.title[:60] + "..." if len(p.title) > 60 else p.title
-        entries.append(
-            MethodComparisonEntry(
-                paper_index=i,
-                title=title,
-                method=sc.method if sc else None,
-                dataset=sc.dataset if sc else None,
-                baseline=sc.baseline if sc else None,
-                results=sc.results if sc else None,
-            )
-        )
-    return entries
-
-
-async def _generate_outline(
-    user_query: str,
-    paper_context: str,
-    language_name: str,
-) -> DraftOutline:
-    return await structured_completion(
-        messages=[
-            {
-                "role": "system",
-                "content": OUTLINE_GENERATION_SYSTEM.format(language_name=language_name),
-            },
-            {
-                "role": "user",
-                "content": DRAFT_USER_PROMPT.format(
-                    user_query=user_query,
-                    paper_context=paper_context,
-                ),
-            },
-        ],
-        response_model=DraftOutline,
-        task_type="writing",
-    )
-
-
-async def _generate_section(
-    section_title: str,
-    section_num: int,
-    total_sections: int,
-    outline_titles: list[str],
-    user_query: str,
-    paper_context: str,
-    language_name: str,
-    num_papers: int,
-) -> ReviewSection:
-    result = await structured_completion(
-        messages=[
-            {
-                "role": "system",
-                "content": SECTION_GENERATION_SYSTEM.format(
-                    section_title=section_title,
-                    section_num=section_num,
-                    total_sections=total_sections,
-                    outline_titles=", ".join(outline_titles),
-                    language_name=language_name,
-                    num_papers=num_papers,
-                ),
-            },
-            {
-                "role": "user",
-                "content": DRAFT_USER_PROMPT.format(
-                    user_query=user_query,
-                    paper_context=paper_context,
-                ),
-            },
-        ],
-        response_model=ReviewSection,
-        max_tokens=get_section_max_tokens(num_papers),
-        task_type="writing",
-    )
-    return ReviewSection(heading=section_title, content=result.content)
-
-
 async def writer_agent(state: AgentState) -> dict[str, Any]:
     approved = state.get("selected_papers") or state.get("approved_papers", [])
     papers_with_contributions = [p for p in approved if p.core_contribution]
@@ -697,7 +427,7 @@ async def writer_agent(state: AgentState) -> dict[str, Any]:
             "agent_handoffs": ["extractor→writer"],
         }
 
-    paper_context = _build_paper_context(papers_with_contributions)
+    paper_context = build_paper_context(papers_with_contributions)
     user_query = state["user_query"]
     qa_errors = state.get("qa_errors", [])
     retry_count = state.get("retry_count", 0)
@@ -779,7 +509,7 @@ async def writer_agent(state: AgentState) -> dict[str, Any]:
             output_language,
         )
 
-        outline = await _generate_outline(user_query, paper_context, language_name)
+        outline = await generate_outline(user_query, paper_context, language_name)
         logger.info(
             "writer_agent: outline generated - '%s' with %d sections",
             outline.title,
@@ -791,7 +521,7 @@ async def writer_agent(state: AgentState) -> dict[str, Any]:
             len(outline.section_titles),
         )
         section_tasks = [
-            _generate_section(
+            generate_section(
                 section_title=section_title,
                 section_num=i,
                 total_sections=len(outline.section_titles),
