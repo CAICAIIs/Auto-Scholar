@@ -64,9 +64,9 @@ describe('useResearchStore', () => {
 
   describe('paper selection', () => {
     const mockPapers: Paper[] = [
-      { paper_id: 'p1', title: 'Paper 1', authors: [], abstract: '', url: '', year: 2023, doi: null, pdf_url: null, is_approved: false, core_contribution: null, structured_contribution: null },
-      { paper_id: 'p2', title: 'Paper 2', authors: [], abstract: '', url: '', year: 2024, doi: null, pdf_url: null, is_approved: false, core_contribution: null, structured_contribution: null },
-      { paper_id: 'p3', title: 'Paper 3', authors: [], abstract: '', url: '', year: 2024, doi: null, pdf_url: null, is_approved: false, core_contribution: null, structured_contribution: null },
+      { paper_id: 'p1', title: 'Paper 1', authors: [], abstract: '', url: '', year: 2023, doi: null, pdf_url: null, is_approved: false, core_contribution: null, structured_contribution: null, source: 'semantic_scholar' },
+      { paper_id: 'p2', title: 'Paper 2', authors: [], abstract: '', url: '', year: 2024, doi: null, pdf_url: null, is_approved: false, core_contribution: null, structured_contribution: null, source: 'semantic_scholar' },
+      { paper_id: 'p3', title: 'Paper 3', authors: [], abstract: '', url: '', year: 2024, doi: null, pdf_url: null, is_approved: false, core_contribution: null, structured_contribution: null, source: 'semantic_scholar' },
     ]
 
     it('sets candidate papers and selects all by default', () => {

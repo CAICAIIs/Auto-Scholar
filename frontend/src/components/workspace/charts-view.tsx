@@ -65,6 +65,7 @@ export function ChartsView({ papers }: ChartsViewProps) {
               <h4 className="text-sm font-medium text-zinc-700 dark:text-zinc-300 mb-3">
                 {t('chartYearTrend')}
               </h4>
+              {/* eslint-disable-next-line @next/next/no-img-element */}
               <img
                 src={`data:image/png;base64,${charts.year_trend}`}
                 alt="Year Trend Chart"
@@ -78,6 +79,7 @@ export function ChartsView({ papers }: ChartsViewProps) {
               <h4 className="text-sm font-medium text-zinc-700 dark:text-zinc-300 mb-3">
                 {t('chartSourceDistribution')}
               </h4>
+              {/* eslint-disable-next-line @next/next/no-img-element */}
               <img
                 src={`data:image/png;base64,${charts.source_distribution}`}
                 alt="Source Distribution Chart"
@@ -91,6 +93,7 @@ export function ChartsView({ papers }: ChartsViewProps) {
               <h4 className="text-sm font-medium text-zinc-700 dark:text-zinc-300 mb-3">
                 {t('chartAuthorFrequency')}
               </h4>
+              {/* eslint-disable-next-line @next/next/no-img-element */}
               <img
                 src={`data:image/png;base64,${charts.author_frequency}`}
                 alt="Author Frequency Chart"

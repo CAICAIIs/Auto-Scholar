@@ -40,7 +40,7 @@ export function HistoryPanel({ onSessionLoaded }: HistoryPanelProps) {
     if (expanded && sessions.length === 0) {
       fetchSessions()
     }
-  }, [expanded])
+  }, [expanded, sessions.length])
 
   const handleLoadSession = async (threadId: string) => {
     setLoadingSession(threadId)
