@@ -25,10 +25,15 @@ Auto-Scholar is a full-stack system for generating structured literature reviews
 - `backend/schemas.py`: Pydantic v2 contracts for APIs and internal models
 - `backend/utils/`
   - `scholar_api.py`: Semantic Scholar / arXiv / PubMed clients
-  - `llm_client.py`: structured LLM calls
+  - `llm_client.py`: compatibility façade for structured LLM calls
   - `event_queue.py`: SSE debouncing queue
   - `exporter.py`: Markdown/DOCX export
   - `claim_verifier.py`: citation claim verification
+ - `backend/llm/`
+   - `registry.py`: model registry loading, provider detection, capability inference
+   - `router.py`: task-aware model ranking and fallback ordering
+   - `runtime.py`: runtime selection policy and model resolution primitives
+   - `execution.py`: execution plan building and structured response parsing
 
 ### Frontend
 
@@ -108,3 +113,14 @@ Auto-Scholar is a full-stack system for generating structured literature reviews
 - Retry strategy in API client layer (tenacity)
 - Concurrency controls for LLM extraction and fulltext enrichment
 - SSE debouncing to reduce request frequency and improve UI smoothness
+
+## AgentRuntime Design
+
+- The runtime uses an explicit split between **registry**, **routing**, and **invocation**:
+- The runtime uses an explicit split between **registry**, **routing**, **execution**, and **invocation**:
+  - **Registry** decides which models exist and what capabilities/providers they expose.
+  - **Routing** decides which model best fits a task and in what fallback order.
+  - **Runtime policy** turns request intent (`model_id`, `task_type`) into an inspectable execution selection.
+  - **Execution** owns deterministic fallback iteration and response parsing/validation for structured completions.
+  - **Invocation façade** (`backend/utils/llm_client.py`) preserves existing call sites while executing the selected plan.
+- This keeps production-specific concerns such as multi-provider support and fallback chains, while making deterministic runtime policy explicit instead of embedding it inside one utility module.
