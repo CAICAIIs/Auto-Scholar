@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import logging
 
+from backend.llm.health import should_skip_model
 from backend.llm.task_types import TASK_REQUIREMENTS, TaskType
 from backend.schemas import CostTier, ModelConfig
 
@@ -48,6 +49,9 @@ def select_model(
     for model in available_models.values():
         if not model.enabled:
             continue
+        if should_skip_model(model.id):
+            logger.warning("Router: skipping unhealthy model=%s for task=%s", model.id, task_type)
+            continue
         if req.needs_structured_output and not model.supports_structured_output:
             continue
         if req.needs_long_context and not model.supports_long_context:
@@ -86,6 +90,13 @@ def get_fallback_chain(
 
     for model in available_models.values():
         if not model.enabled:
+            continue
+        if should_skip_model(model.id):
+            logger.warning(
+                "Router: excluding unhealthy fallback candidate model=%s for task=%s",
+                model.id,
+                task_type,
+            )
             continue
         if req.needs_structured_output and not model.supports_structured_output:
             continue

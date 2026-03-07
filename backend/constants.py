@@ -2,17 +2,28 @@
 
 Each constant has a rationale explaining why this specific value was chosen.
 This enables informed discussion during code reviews and interviews.
+
+NOTE: Environment variables are now centralized in backend.core.config.Settings.
+This file maintains backward compatibility by importing from the settings instance.
 """
 
 import os
 
+from backend.core.config import get_settings
+
+# Get settings instance
+settings = get_settings()
+
 # =============================================================================
-# Environment Variable Helpers
+# Environment Variable Helpers (DEPRECATED - use settings.field_name instead)
 # =============================================================================
 
 
 def _parse_int_env(name: str, default: int, min_val: int, max_val: int) -> int:
     """Parse an integer environment variable with bounds clamping.
+
+    DEPRECATED: This function is kept for backward compatibility.
+    New code should use settings fields directly.
 
     Returns default if env var is unset or unparseable. Clamps to [min_val, max_val].
     """
@@ -44,12 +55,12 @@ PAPERS_PER_QUERY = 5
 # Concurrency Limits
 # =============================================================================
 
-LLM_CONCURRENCY = _parse_int_env("LLM_CONCURRENCY", default=2, min_val=1, max_val=20)
+LLM_CONCURRENCY = settings.llm_concurrency
 # Why 2: OpenAI free/low-tier limits ~3 RPM. Concurrency=2 avoids rate limits
 # while being 2x faster than sequential. Increase for higher-tier API keys.
 # Configurable via LLM_CONCURRENCY env var (clamped to 1-20).
 
-LLM_DEFAULT_MAX_TOKENS = 8192
+LLM_DEFAULT_MAX_TOKENS = settings.llm_default_max_tokens
 # Why 8192: DeepSeek defaults to 4096 when max_tokens is not set, which causes
 # JSON truncation on longer outputs. 8192 is DeepSeek's maximum supported value.
 # For OpenAI models this is also a safe default (well within their limits).
@@ -107,13 +118,19 @@ SOURCE_SKIP_WINDOW_SECONDS = 120
 # Why 120: 2-minute window balances quick recovery detection with
 # avoiding repeated failures. Sources typically recover within minutes.
 
+MODEL_SKIP_THRESHOLD = 3
+# Why 3: Same threshold as source failure tracking. Repeated failures strongly
+# indicate an unhealthy model/provider route and justify temporary bypass.
+
+MODEL_SKIP_WINDOW_SECONDS = 120
+# Why 120: Same 2-minute window as source tracking, balancing resilience and
+# recovery without requiring manual intervention.
+
 # =============================================================================
 # Claim Verification Configuration
 # =============================================================================
 
-CLAIM_VERIFICATION_CONCURRENCY = _parse_int_env(
-    "CLAIM_VERIFICATION_CONCURRENCY", default=2, min_val=1, max_val=20
-)
+CLAIM_VERIFICATION_CONCURRENCY = settings.claim_verification_concurrency
 # Why 2: Same as LLM_CONCURRENCY. Each claim verification is an LLM call.
 # Keeps within rate limits while parallelizing verification.
 # Configurable via CLAIM_VERIFICATION_CONCURRENCY env var (clamped to 1-20).
@@ -126,7 +143,7 @@ CLAIM_BATCH_SIZE = 3
 # Claim verification can be disabled for time-sensitive scenarios
 # Default: true (maintains 97.3% citation accuracy)
 # Opt-out: Set to "false" to disable claim verification
-CLAIM_VERIFICATION_ENABLED = os.getenv("CLAIM_VERIFICATION_ENABLED", "true").lower() == "true"
+CLAIM_VERIFICATION_ENABLED = settings.claim_verification_enabled
 # Feature flag to enable/disable semantic claim verification.
 # Set to False to skip claim-level checks and use only rule-based validation.
 
@@ -202,17 +219,17 @@ CONTEXT_OVERFLOW_WARNING_THRESHOLD = 100
 # Multi-Model Configuration
 # =============================================================================
 
-DEFAULT_MODEL_ID = os.getenv("LLM_MODEL_ID", "")
+DEFAULT_MODEL_ID = settings.llm_model_id
 # Canonical model ID for per-request routing (e.g. "openai:gpt-4o", "ollama:llama3.1:8b").
 # Empty string means use legacy env vars (LLM_BASE_URL + LLM_MODEL).
 
-OLLAMA_BASE_URL = os.getenv("OLLAMA_BASE_URL", "http://localhost:11434/v1")
-OLLAMA_API_KEY = "ollama"
+OLLAMA_BASE_URL = settings.ollama_base_url
+OLLAMA_API_KEY = settings.ollama_api_key
 
-MODEL_REGISTRY_JSON = os.getenv("MODEL_REGISTRY", "")
+MODEL_REGISTRY_JSON = settings.model_registry_json
 # Optional JSON string defining available models. If empty, auto-detected from env vars.
 
-MODEL_CONFIG_PATH = os.getenv("MODEL_CONFIG_PATH", "")
+MODEL_CONFIG_PATH = settings.model_config_path
 # Path to YAML model configuration file. If set and file exists, takes priority
 # over MODEL_REGISTRY JSON and auto-detected env vars.
 # Example: MODEL_CONFIG_PATH=config/models.yaml
@@ -221,61 +238,59 @@ MODEL_CONFIG_PATH = os.getenv("MODEL_CONFIG_PATH", "")
 # PDF Object Storage (MinIO + Redis)
 # =============================================================================
 
-MINIO_ENDPOINT = os.getenv("MINIO_ENDPOINT", "localhost:9000")
+MINIO_ENDPOINT = settings.minio_endpoint
 # Why localhost:9000: Matches Docker Compose MinIO API binding and keeps local
 # development zero-config. Production can override with an internal endpoint.
 
-MINIO_ACCESS_KEY = os.getenv("MINIO_ACCESS_KEY", "minioadmin")
+MINIO_ACCESS_KEY = settings.minio_access_key
 # Why minioadmin default: MinIO's standard local bootstrap credential keeps
 # onboarding simple. Must be overridden in production deployments.
 
-MINIO_SECRET_KEY = os.getenv("MINIO_SECRET_KEY", "minioadmin")
+MINIO_SECRET_KEY = settings.minio_secret_key
 # Why minioadmin default: Pairs with local dev defaults for frictionless startup;
 # production environments should always inject a strong secret.
 
-MINIO_SECURE = os.getenv("MINIO_SECURE", "false").lower() == "true"
+MINIO_SECURE = settings.minio_secure
 # Why false by default: Local Docker networking commonly uses HTTP without TLS.
 # This flag allows strict HTTPS enablement in staging/production.
 
-MINIO_BUCKET_RAW = os.getenv("MINIO_BUCKET_RAW", "rag-raw")
+MINIO_BUCKET_RAW = settings.minio_bucket_raw
 # Why rag-raw: Separates original PDFs from downstream artifacts for traceability
 # and reprocessing workflows.
 
-MINIO_BUCKET_PROCESSED = os.getenv("MINIO_BUCKET_PROCESSED", "rag-processed")
+MINIO_BUCKET_PROCESSED = settings.minio_bucket_processed
 # Why rag-processed: Dedicated bucket avoids mixing transformed outputs with raw
 # source files and simplifies lifecycle/access policy tuning.
 
-MINIO_BUCKET_TMP = os.getenv("MINIO_BUCKET_TMP", "rag-tmp")
+MINIO_BUCKET_TMP = settings.minio_bucket_tmp
 # Why rag-tmp: Isolates ephemeral artifacts so they can be aggressively expired
 # without affecting durable raw/processed research data.
 
-REDIS_HOST = os.getenv("REDIS_HOST", "localhost")
+REDIS_HOST = settings.redis_host
 # Why localhost: Supports default local deployment where Redis runs in the same
 # Docker network or host machine; can be overridden for managed Redis.
 
-REDIS_PORT = _parse_int_env("REDIS_PORT", default=6379, min_val=1, max_val=65535)
+REDIS_PORT = settings.redis_port
 # Why 6379: Standard Redis port minimizes configuration overhead and matches the
 # official container defaults.
 
-REDIS_DB = _parse_int_env("REDIS_DB", default=0, min_val=0, max_val=15)
+REDIS_DB = settings.redis_db
 # Why DB 0: Redis default logical database keeps compatibility with most clients;
 # bounded range prevents invalid DB indices.
 
-REDIS_PASSWORD = os.getenv("REDIS_PASSWORD", "")
+REDIS_PASSWORD = settings.redis_password
 # Why empty default: Local development Redis commonly runs without auth. Secrets
 # should be injected in production where Redis is network-exposed.
 
-REDIS_PDF_CACHE_TTL = _parse_int_env(
-    "REDIS_PDF_CACHE_TTL", default=86400, min_val=60, max_val=604800
-)
+REDIS_PDF_CACHE_TTL = settings.redis_pdf_cache_ttl
 # Why 86400 seconds: 24-hour cache window balances hit rate for repeated PDF
 # access against staleness and memory pressure.
 
-PDF_DOWNLOAD_TIMEOUT = _parse_int_env("PDF_DOWNLOAD_TIMEOUT", default=30, min_val=5, max_val=300)
+PDF_DOWNLOAD_TIMEOUT = settings.pdf_download_timeout
 # Why 30 seconds: Long enough for typical academic PDF downloads over moderate
 # networks while preventing hung requests from stalling the pipeline.
 
-PDF_MAX_SIZE_MB = _parse_int_env("PDF_MAX_SIZE_MB", default=50, min_val=1, max_val=500)
+PDF_MAX_SIZE_MB = settings.pdf_max_size_mb
 # Why 50 MB: Covers most research PDFs while guarding against unusually large
 # files that can degrade throughput and memory usage.
 
@@ -306,7 +321,7 @@ TIKTOKEN_MODEL = "cl100k_base"
 # Embedding Configuration
 # =============================================================================
 
-EMBEDDING_MODEL = os.getenv("EMBEDDING_MODEL", "text-embedding-3-small")
+EMBEDDING_MODEL = settings.embedding_model
 # Why text-embedding-3-small: OpenAI's latest, 1536 dimensions, $0.02/1M tokens.
 # Balances cost vs quality. Upgrade to text-embedding-3-large for higher accuracy.
 
@@ -328,24 +343,24 @@ EMBEDDING_MAX_RETRIES = 3
 # PostgreSQL Configuration
 # =============================================================================
 
-POSTGRES_HOST = os.getenv("POSTGRES_HOST", "localhost")
-POSTGRES_PORT = _parse_int_env("POSTGRES_PORT", default=5432, min_val=1, max_val=65535)
-POSTGRES_DB = os.getenv("POSTGRES_DB", "autoscholar")
-POSTGRES_USER = os.getenv("POSTGRES_USER", "autoscholar")
-POSTGRES_PASSWORD = os.getenv("POSTGRES_PASSWORD", "autoscholar")
+POSTGRES_HOST = settings.postgres_host
+POSTGRES_PORT = settings.postgres_port
+POSTGRES_DB = settings.postgres_db
+POSTGRES_USER = settings.postgres_user
+POSTGRES_PASSWORD = settings.postgres_password
 
 
 def get_postgres_url() -> str:
-    return f"postgresql+asyncpg://{POSTGRES_USER}:{POSTGRES_PASSWORD}@{POSTGRES_HOST}:{POSTGRES_PORT}/{POSTGRES_DB}"
+    return settings.get_postgres_url()
 
 
 # =============================================================================
 # Vector Store Configuration
 # =============================================================================
 
-QDRANT_HOST = os.getenv("QDRANT_HOST", "localhost")
-QDRANT_PORT = _parse_int_env("QDRANT_PORT", default=6333, min_val=1, max_val=65535)
-QDRANT_COLLECTION_NAME = os.getenv("QDRANT_COLLECTION_NAME", "paper_chunks")
+QDRANT_HOST = settings.qdrant_host
+QDRANT_PORT = settings.qdrant_port
+QDRANT_COLLECTION_NAME = settings.qdrant_collection_name
 
 VECTOR_SEARCH_LIMIT = 10
 VECTOR_SEARCH_THRESHOLD = 0.7
@@ -354,7 +369,7 @@ VECTOR_SEARCH_THRESHOLD = 0.7
 # Vector Pipeline Feature Flag
 # =============================================================================
 
-VECTOR_PIPELINE_ENABLED = os.getenv("VECTOR_PIPELINE_ENABLED", "false").lower() == "true"
+VECTOR_PIPELINE_ENABLED = settings.vector_pipeline_enabled
 
 # =============================================================================
 # RAG Ingestion Gateway
@@ -363,5 +378,5 @@ VECTOR_PIPELINE_ENABLED = os.getenv("VECTOR_PIPELINE_ENABLED", "false").lower() 
 # download → chunk → embed → index asynchronously with ~64KB peak memory per PDF.
 # =============================================================================
 
-RAG_GATEWAY_URL = os.getenv("RAG_GATEWAY_URL", "")
-RAG_GATEWAY_TIMEOUT = _parse_int_env("RAG_GATEWAY_TIMEOUT", default=10, min_val=1, max_val=60)
+RAG_GATEWAY_URL = settings.rag_gateway_url
+RAG_GATEWAY_TIMEOUT = settings.rag_gateway_timeout

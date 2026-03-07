@@ -1,6 +1,7 @@
 import os
 from unittest.mock import patch
 
+from backend.llm.health import record_model_failure, reset_model_health, should_skip_model
 from backend.schemas import ModelConfig, ModelProvider
 from backend.utils.llm_client import (
     _build_default_registry,
@@ -13,6 +14,9 @@ from backend.utils.llm_client import (
 
 
 class TestDetectProvider:
+    def setup_method(self):
+        reset_model_health()
+
     def test_openai_url(self):
         assert _detect_provider_from_url("https://api.openai.com/v1") == ModelProvider.OPENAI
 
@@ -30,6 +34,9 @@ class TestDetectProvider:
 
 
 class TestBuildDefaultRegistry:
+    def setup_method(self):
+        reset_model_health()
+
     @patch.dict(
         os.environ,
         {
@@ -114,6 +121,9 @@ class TestBuildDefaultRegistry:
 
 
 class TestResolveModel:
+    def setup_method(self):
+        reset_model_health()
+
     @patch.dict(
         os.environ,
         {
@@ -170,6 +180,9 @@ class TestResolveModel:
 
 
 class TestListModels:
+    def setup_method(self):
+        reset_model_health()
+
     @patch.dict(
         os.environ,
         {
@@ -190,6 +203,9 @@ class TestListModels:
 
 
 class TestClientCache:
+    def setup_method(self):
+        reset_model_health()
+
     def test_same_params_return_same_client(self):
         import backend.utils.llm_client as mod
 
@@ -208,6 +224,9 @@ class TestClientCache:
 
 
 class TestGetModelRegistry:
+    def setup_method(self):
+        reset_model_health()
+
     @patch.dict(
         os.environ,
         {
@@ -239,3 +258,14 @@ class TestGetModelRegistry:
         mod._model_registry = None
         registry = get_model_registry()
         assert isinstance(registry, dict)
+
+
+class TestModelHealthTracking:
+    def setup_method(self):
+        reset_model_health()
+
+    def test_model_marked_unhealthy_after_threshold(self):
+        for _ in range(3):
+            record_model_failure("openai:gpt-4o")
+
+        assert should_skip_model("openai:gpt-4o") is True
