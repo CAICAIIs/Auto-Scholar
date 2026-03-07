@@ -20,6 +20,7 @@ from backend.evaluation.cost_tracker import get_total_cost_usd
 from backend.evaluation.human_ratings import get_ratings_for_thread, save_rating
 from backend.evaluation.runner import run_evaluation
 from backend.evaluation.schemas import EvaluationResult, HumanRating
+from backend.llm.health import get_model_health
 from backend.schemas import (
     ApproveRequest,
     ApproveResponse,
@@ -799,6 +800,28 @@ async def evaluate_session(thread_id: str):
 @app.get("/api/models", response_model=list[ModelConfig])
 async def get_available_models():
     return list_models()
+
+
+class ModelHealthResponse(BaseModel):
+    model_id: str
+    provider: str
+    state: str
+    recent_failures: int
+    last_failure_at: float | None = None
+
+
+@app.get("/api/models/health", response_model=list[ModelHealthResponse])
+async def get_model_health_status():
+    return [
+        ModelHealthResponse(
+            model_id=health.model_id,
+            provider=health.provider,
+            state=health.state.value,
+            recent_failures=health.recent_failures,
+            last_failure_at=health.last_failure_at,
+        )
+        for health in (get_model_health(model) for model in list_models())
+    ]
 
 
 @app.post("/api/ratings", response_model=HumanRating)

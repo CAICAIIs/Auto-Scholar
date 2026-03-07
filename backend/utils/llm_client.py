@@ -7,7 +7,6 @@ from contextvars import ContextVar
 from typing import Any, TypeVar
 
 import httpx
-import json_repair
 from dotenv import load_dotenv
 from openai import (
     APIConnectionError,
@@ -17,7 +16,7 @@ from openai import (
     RateLimitError,
 )
 from openai.types.chat import ChatCompletionMessageParam
-from pydantic import BaseModel, ValidationError
+from pydantic import BaseModel
 from tenacity import (
     before_sleep_log,
     retry,
@@ -26,11 +25,26 @@ from tenacity import (
     wait_random_exponential,
 )
 
-from backend.constants import LLM_DEFAULT_MAX_TOKENS, OLLAMA_BASE_URL
+from backend.llm.execution import (
+    build_execution_plan,
+    execute_structured,
+    mark_invocation_failure,
+    mark_invocation_success,
+)
+from backend.llm.registry import (
+    build_default_registry,
+    detect_provider_from_url,
+    infer_model_capabilities,
+    list_models as list_registered_models,
+    reset_model_registry,
+)
+from backend.llm.runtime import build_runtime_selection, resolve_model_config
+from backend.llm.providers import resolve_api_key
+from backend.constants import LLM_DEFAULT_MAX_TOKENS
 from backend.evaluation.cost_tracker import record_llm_usage
-from backend.schemas import CostTier, ModelConfig, ModelProvider
+from backend.schemas import ModelConfig, ModelProvider
 
-load_dotenv()
+_ = load_dotenv()
 
 logger = logging.getLogger(__name__)
 
@@ -44,6 +58,21 @@ token_callback_var: ContextVar[TokenCallback | None] = ContextVar(
 LLM_TIMEOUT = httpx.Timeout(connect=60.0, read=120.0, write=60.0, pool=60.0)
 
 _client_cache: dict[tuple[str, str], AsyncOpenAI] = {}
+
+
+async def cleanup_llm_clients() -> None:
+    if not _client_cache:
+        return
+
+    for cache_key, client in list(_client_cache.items()):
+        try:
+            await client.close()
+            logger.info("Closed LLM client cache entry for base_url=%s", cache_key[0])
+        except Exception as e:
+            logger.warning("Failed to close LLM client cache entry %s: %s", cache_key[0], e)
+
+    _client_cache.clear()
+    logger.info("Cleared LLM client cache")
 
 
 def _get_or_create_client(api_key: str, base_url: str) -> AsyncOpenAI:
@@ -70,123 +99,15 @@ def get_model() -> str:
 
 
 def _detect_provider_from_url(base_url: str) -> ModelProvider:
-    url_lower = base_url.lower()
-    if "openai.com" in url_lower:
-        return ModelProvider.OPENAI
-    if "deepseek.com" in url_lower:
-        return ModelProvider.DEEPSEEK
-    if "localhost" in url_lower or "127.0.0.1" in url_lower or "11434" in url_lower:
-        return ModelProvider.OLLAMA
-    return ModelProvider.CUSTOM
+    return detect_provider_from_url(base_url)
 
 
 def _infer_capabilities(provider: ModelProvider, model_name: str) -> dict[str, Any]:
-    name_lower = model_name.lower()
-
-    if provider == ModelProvider.OLLAMA:
-        return {
-            "max_context_tokens": 8_000,
-            "supports_long_context": False,
-            "cost_tier": CostTier.LOW,
-            "reasoning_score": 4,
-            "creativity_score": 4,
-            "latency_score": 8,
-        }
-
-    if provider == ModelProvider.DEEPSEEK:
-        is_reasoner = "reasoner" in name_lower or "r1" in name_lower
-        return {
-            "max_context_tokens": 64_000,
-            "supports_long_context": True,
-            "cost_tier": CostTier.LOW,
-            "reasoning_score": 9 if is_reasoner else 7,
-            "creativity_score": 6,
-            "latency_score": 7,
-        }
-
-    is_mini = "mini" in name_lower
-    is_o_series = name_lower.startswith("o1") or name_lower.startswith("o3")
-    return {
-        "max_context_tokens": 128_000,
-        "supports_long_context": True,
-        "cost_tier": CostTier.LOW if is_mini else CostTier.HIGH,
-        "reasoning_score": 9 if is_o_series else (6 if is_mini else 8),
-        "creativity_score": 5 if is_mini else 8,
-        "latency_score": 9 if is_mini else 6,
-    }
+    return infer_model_capabilities(provider, model_name)
 
 
 def _build_default_registry() -> dict[str, ModelConfig]:
-    registry: dict[str, ModelConfig] = {}
-
-    api_key = os.environ.get("LLM_API_KEY", "")
-    base_url = os.environ.get("LLM_BASE_URL", "https://api.openai.com/v1")
-    model_name = os.environ.get("LLM_MODEL", "gpt-4o")
-
-    if api_key:
-        provider = _detect_provider_from_url(base_url)
-        model_id = f"{provider.value}:{model_name}"
-        is_local = provider == ModelProvider.OLLAMA
-        supports_json = provider != ModelProvider.OLLAMA
-        caps = _infer_capabilities(provider, model_name)
-        registry[model_id] = ModelConfig(
-            id=model_id,
-            provider=provider,
-            model_name=model_name,
-            display_name=f"{model_name} ({provider.value})",
-            api_base=base_url,
-            api_key_env="LLM_API_KEY",
-            supports_json_mode=supports_json,
-            supports_structured_output=supports_json,
-            max_output_tokens=LLM_DEFAULT_MAX_TOKENS,
-            is_local=is_local,
-            **caps,
-        )
-
-    deepseek_key = os.environ.get("DEEPSEEK_API_KEY", "")
-    if deepseek_key:
-        ds_base = os.environ.get("DEEPSEEK_BASE_URL", "https://api.deepseek.com/v1")
-        ds_model = os.environ.get("DEEPSEEK_MODEL", "deepseek-chat")
-        ds_id = f"deepseek:{ds_model}"
-        if ds_id not in registry:
-            ds_caps = _infer_capabilities(ModelProvider.DEEPSEEK, ds_model)
-            registry[ds_id] = ModelConfig(
-                id=ds_id,
-                provider=ModelProvider.DEEPSEEK,
-                model_name=ds_model,
-                display_name=f"{ds_model} (DeepSeek)",
-                api_base=ds_base,
-                api_key_env="DEEPSEEK_API_KEY",
-                supports_json_mode=True,
-                supports_structured_output=True,
-                max_output_tokens=LLM_DEFAULT_MAX_TOKENS,
-                is_local=False,
-                **ds_caps,
-            )
-
-    ollama_models_str = os.environ.get("OLLAMA_MODELS", "")
-    if ollama_models_str:
-        for m in ollama_models_str.split(","):
-            m = m.strip()
-            if not m:
-                continue
-            oid = f"ollama:{m}"
-            ollama_caps = _infer_capabilities(ModelProvider.OLLAMA, m)
-            registry[oid] = ModelConfig(
-                id=oid,
-                provider=ModelProvider.OLLAMA,
-                model_name=m,
-                display_name=f"{m} (Ollama, local)",
-                api_base=OLLAMA_BASE_URL,
-                api_key_env="",
-                supports_json_mode=False,
-                supports_structured_output=False,
-                max_output_tokens=4096,
-                is_local=True,
-                **ollama_caps,
-            )
-
-    return registry
+    return build_default_registry()
 
 
 _model_registry: dict[str, ModelConfig] | None = None
@@ -195,50 +116,24 @@ _model_registry: dict[str, ModelConfig] | None = None
 def get_model_registry() -> dict[str, ModelConfig]:
     global _model_registry
     if _model_registry is None:
-        from backend.config.loader import load_model_config
+        reset_model_registry()
+        from backend.llm.registry import get_model_registry as load_runtime_registry
 
-        config_path = os.environ.get("MODEL_CONFIG_PATH", "")
-        if config_path:
-            yaml_registry = load_model_config(config_path)
-            if yaml_registry:
-                _model_registry = yaml_registry
-                return _model_registry
-
-        custom_json = os.environ.get("MODEL_REGISTRY", "")
-        if custom_json.strip():
-            try:
-                raw_list = json.loads(custom_json)
-                _model_registry = {}
-                for item in raw_list:
-                    cfg = ModelConfig.model_validate(item)
-                    _model_registry[cfg.id] = cfg
-            except (json.JSONDecodeError, ValidationError) as e:
-                logger.warning("MODEL_REGISTRY env var invalid (%s), using auto-detected", e)
-                _model_registry = _build_default_registry()
-        else:
-            _model_registry = _build_default_registry()
+        _model_registry = load_runtime_registry()
     return _model_registry
 
 
 def list_models() -> list[ModelConfig]:
-    return [m for m in get_model_registry().values() if m.enabled]
+    return list_registered_models()
 
 
 def resolve_model(model_id: str | None = None) -> tuple[AsyncOpenAI, str, bool]:
     registry = get_model_registry()
-
-    if model_id and model_id in registry:
-        cfg = registry[model_id]
-        api_key = os.environ.get(cfg.api_key_env, "") if cfg.api_key_env else "ollama"
-        if not api_key and cfg.provider != ModelProvider.OLLAMA:
-            logger.warning(
-                "No API key for model %s (env: %s), falling back to default",
-                model_id,
-                cfg.api_key_env,
-            )
-        else:
-            client = _get_or_create_client(api_key or "ollama", cfg.api_base)
-            return client, cfg.model_name, cfg.supports_json_mode
+    cfg = resolve_model_config(model_registry=registry, model_id=model_id)
+    if cfg is not None:
+        api_key = resolve_api_key(cfg)
+        client = _get_or_create_client(api_key, cfg.api_base)
+        return client, cfg.model_name, cfg.supports_json_mode
 
     return get_client(), get_model(), True
 
@@ -434,103 +329,27 @@ async def structured_completion(
     model_id: str | None = None,
     task_type: str | None = None,
 ) -> T:
-    effective_model_id = model_id
-    if not effective_model_id and task_type:
-        from backend.llm.router import select_model
-        from backend.llm.task_types import TaskType
+    registry = get_model_registry()
+    runtime_selection = build_runtime_selection(
+        model_registry=registry,
+        requested_model_id=model_id,
+        task_type_value=task_type,
+    )
+    execution_plan = build_execution_plan(
+        runtime_selection=runtime_selection,
+        temperature=temperature,
+        max_tokens=max_tokens,
+        task_type=task_type,
+    )
 
-        try:
-            tt = TaskType(task_type)
-            registry = get_model_registry()
-            effective_model_id = select_model(tt, registry, override_model_id=model_id)
-        except (ValueError, KeyError):
-            logger.warning("Unknown task_type=%s, using default model", task_type)
-
-    client, model_name, supports_json_mode = resolve_model(effective_model_id)
-    schema_instruction = _build_schema_prompt(response_model)
-
-    augmented_messages: list[dict[str, Any]] = []
-    for msg in messages:
-        m = dict(msg) if isinstance(msg, dict) else {"role": "user", "content": str(msg)}
-        if m.get("role") == "system":
-            m["content"] = f"{m['content']}\n\n{schema_instruction}"
-            augmented_messages.append(m)
-        else:
-            augmented_messages.append(m)
-
-    if not any(m.get("role") == "system" for m in augmented_messages):
-        augmented_messages.insert(0, {"role": "system", "content": schema_instruction})
-
-    on_token = token_callback_var.get(None)
-    if on_token is not None:
-        raw_content = await _call_llm_streaming(
-            client,
-            augmented_messages,
-            temperature,
-            max_tokens,
-            on_token=on_token,
-            model_name=model_name,
-            use_json_mode=supports_json_mode,
-            task_type=task_type or "",
-        )
-    else:
-        raw_content = await _call_llm(
-            client,
-            augmented_messages,
-            temperature,
-            max_tokens,
-            model_name=model_name,
-            use_json_mode=supports_json_mode,
-            task_type=task_type or "",
-        )
-
-    try:
-        parsed_json = json.loads(raw_content)
-    except json.JSONDecodeError as e:
-        logger.warning("json.loads failed (%s), attempting json_repair...", e)
-        try:
-            parsed_json = json_repair.loads(raw_content)
-            if not isinstance(parsed_json, dict):
-                raise ValueError(
-                    f"json_repair produced {type(parsed_json).__name__}, expected dict"
-                )
-            logger.info("json_repair succeeded, recovered valid JSON")
-        except Exception:
-            truncated_hint = ""
-            if "Unterminated" in str(e) or raw_content.rstrip()[-1] not in "]}":
-                truncated_hint = (
-                    " (output likely truncated - try reducing paper count or increasing max_tokens)"
-                )
-            logger.error(
-                "LLM returned invalid JSON: %s%s\nRaw (last 500 chars): ...%s",
-                e,
-                truncated_hint,
-                raw_content[-500:],
-            )
-            raise ValueError(f"LLM 返回无效 JSON{truncated_hint}: {e}") from e
-
-    schema_keys = {"properties", "type", "required", "$schema", "$defs"}
-    actual_keys = set(parsed_json.keys()) - schema_keys
-
-    if "properties" in parsed_json and not actual_keys:
-        logger.error(
-            "LLM returned schema definition instead of content. Raw: %s",
-            raw_content[:500],
-        )
-        raise ValueError(
-            "LLM returned the JSON schema instead of actual content. "
-            "This is a model behavior issue - the prompt may need adjustment."
-        )
-
-    if "properties" in parsed_json and actual_keys:
-        logger.warning(
-            "LLM mixed schema with content. Extracting actual data from keys: %s",
-            actual_keys,
-        )
-        parsed_json = {k: v for k, v in parsed_json.items() if k not in schema_keys}
-
-    try:
-        return response_model.model_validate(parsed_json)
-    except ValidationError as e:
-        logger.error("LLM output failed validation: %s\nRaw: %s", e, raw_content[:500])
-        raise ValueError(f"LLM output does not match {response_model.__name__}: {e}") from e
+    return await execute_structured(
+        execution_plan=execution_plan,
+        response_model=response_model,
+        messages=messages,
+        schema_instruction=_build_schema_prompt(response_model),
+        token_callback=token_callback_var.get(None),
+        resolve_model=resolve_model,
+        call_llm=_call_llm,
+        call_llm_streaming=_call_llm_streaming,
+        logger=logger,
+    )
