@@ -123,7 +123,7 @@ class TestReflectionAgent:
         }
 
         with patch(
-            "backend.nodes.structured_completion",
+            "backend.nodes.execute_task_completion",
             new=AsyncMock(return_value=mock_reflection),
         ) as mock_llm:
             result = await reflection_agent(state)
@@ -162,7 +162,7 @@ class TestReflectionAgent:
         }
 
         with patch(
-            "backend.nodes.structured_completion",
+            "backend.nodes.execute_task_completion",
             new=AsyncMock(return_value=mock_reflection),
         ):
             result = await reflection_agent(state)
@@ -198,7 +198,7 @@ class TestReflectionAgent:
         }
 
         with patch(
-            "backend.nodes.structured_completion",
+            "backend.nodes.execute_task_completion",
             new=AsyncMock(return_value=mock_reflection),
         ):
             result = await reflection_agent(state)
@@ -247,7 +247,7 @@ class TestWriterUsesReflection:
         )
 
         with patch(
-            "backend.nodes.structured_completion",
+            "backend.nodes.execute_task_completion",
             new=AsyncMock(return_value=mock_draft),
         ) as mock_llm:
             await writer_agent(state)
@@ -285,7 +285,7 @@ class TestWriterUsesReflection:
         )
 
         with patch(
-            "backend.nodes.structured_completion",
+            "backend.nodes.execute_task_completion",
             new=AsyncMock(return_value=mock_draft),
         ) as mock_llm:
             await writer_agent(state)

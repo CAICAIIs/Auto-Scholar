@@ -1,3 +1,10 @@
+import logging
+
+from openai.types.chat import ChatCompletionMessageParam
+
+from backend.llm.execution import build_execution_plan, execute_structured
+from backend.llm.registry import get_model_registry
+from backend.llm.runtime import build_runtime_selection
 from backend.constants import get_section_max_tokens
 from backend.prompts import (
     DRAFT_USER_PROMPT,
@@ -5,7 +12,46 @@ from backend.prompts import (
     SECTION_GENERATION_SYSTEM,
 )
 from backend.schemas import DraftOutline, ReviewSection
-from backend.utils.llm_client import structured_completion
+from backend.utils.llm_client import (
+    _build_schema_prompt,
+    _call_llm,
+    _call_llm_streaming,
+    resolve_model,
+    token_callback_var,
+)
+
+logger = logging.getLogger(__name__)
+
+
+async def execute_task_completion(
+    *,
+    messages: list[ChatCompletionMessageParam],
+    response_model: type,
+    task_type: str,
+    max_tokens: int | None = None,
+):
+    runtime_selection = build_runtime_selection(
+        model_registry=get_model_registry(),
+        requested_model_id=None,
+        task_type_value=task_type,
+    )
+    execution_plan = build_execution_plan(
+        runtime_selection=runtime_selection,
+        temperature=0.3,
+        max_tokens=max_tokens,
+        task_type=task_type,
+    )
+    return await execute_structured(
+        execution_plan=execution_plan,
+        response_model=response_model,
+        messages=messages,
+        schema_instruction=_build_schema_prompt(response_model),
+        token_callback=token_callback_var.get(None),
+        resolve_model=resolve_model,
+        call_llm=_call_llm,
+        call_llm_streaming=_call_llm_streaming,
+        logger=logger,
+    )
 
 
 async def generate_outline(
@@ -13,7 +59,7 @@ async def generate_outline(
     paper_context: str,
     language_name: str,
 ) -> DraftOutline:
-    return await structured_completion(
+    return await execute_task_completion(
         messages=[
             {
                 "role": "system",
@@ -42,7 +88,7 @@ async def generate_section(
     language_name: str,
     num_papers: int,
 ) -> ReviewSection:
-    result = await structured_completion(
+    result = await execute_task_completion(
         messages=[
             {
                 "role": "system",

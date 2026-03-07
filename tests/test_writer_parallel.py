@@ -47,9 +47,9 @@ class TestWriterParallelSections:
         }
 
         with (
-            patch("backend.services.writing.generate_outline", new=AsyncMock(return_value=outline)),
+            patch("backend.nodes.generate_outline", new=AsyncMock(return_value=outline)),
             patch(
-                "backend.services.writing.generate_section",
+                "backend.nodes.generate_section",
                 new=AsyncMock(side_effect=mock_sections),
             ),
         ):
@@ -87,8 +87,8 @@ class TestWriterParallelSections:
         }
 
         with (
-            patch("backend.services.writing.generate_outline", new=AsyncMock(return_value=outline)),
-            patch("backend.services.writing.generate_section", side_effect=mock_section_gen),
+            patch("backend.nodes.generate_outline", new=AsyncMock(return_value=outline)),
+            patch("backend.nodes.generate_section", side_effect=mock_section_gen),
         ):
             result = await writer_agent(state)
 
@@ -120,9 +120,9 @@ class TestWriterParallelSections:
         }
 
         with (
-            patch("backend.services.writing.generate_outline", new=AsyncMock(return_value=outline)),
+            patch("backend.nodes.generate_outline", new=AsyncMock(return_value=outline)),
             patch(
-                "backend.services.writing.generate_section",
+                "backend.nodes.generate_section",
                 new=AsyncMock(side_effect=RuntimeError("All LLM calls failed")),
             ),
         ):
@@ -153,8 +153,8 @@ class TestWriterParallelSections:
         }
 
         with (
-            patch("backend.nodes.structured_completion", new=AsyncMock(return_value=mock_draft)),
-            patch("backend.services.writing.generate_outline") as mock_outline,
+            patch("backend.nodes.execute_task_completion", new=AsyncMock(return_value=mock_draft)),
+            patch("backend.nodes.generate_outline") as mock_outline,
         ):
             result = await writer_agent(state)
 

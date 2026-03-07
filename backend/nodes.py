@@ -49,7 +49,7 @@ from backend.services.context import (
     prioritize_by_sub_questions,
 )
 from backend.services.extraction import extract_contribution
-from backend.services.writing import generate_outline, generate_section
+from backend.services.writing import execute_task_completion, generate_outline, generate_section
 from backend.state import AgentState
 from backend.utils.claim_verifier import verify_draft_citations
 from backend.utils.fulltext_api import enrich_papers_with_fulltext
@@ -151,7 +151,7 @@ async def planner_agent(state: AgentState) -> dict[str, Any]:
     if use_cot:
         system_content = PLANNER_COT_SYSTEM
         start_time = time.perf_counter()
-        plan = await structured_completion(
+        plan = await execute_task_completion(
             messages=[
                 {"role": "system", "content": system_content},
                 {"role": "user", "content": user_query},
@@ -190,7 +190,7 @@ async def planner_agent(state: AgentState) -> dict[str, Any]:
         )
 
     start_time = time.perf_counter()
-    result = await structured_completion(
+    result = await execute_task_completion(
         messages=[
             {"role": "system", "content": system_content},
             {"role": "user", "content": user_query},
@@ -486,7 +486,7 @@ async def writer_agent(state: AgentState) -> dict[str, Any]:
                     num_papers=num_papers,
                 )
 
-        draft = await structured_completion(
+        draft = await execute_task_completion(
             messages=[
                 {"role": "system", "content": system_prompt},
                 {
@@ -719,7 +719,7 @@ async def reflection_agent(state: AgentState) -> dict[str, Any]:
         retry_count,
     )
 
-    reflection = await structured_completion(
+    reflection = await execute_task_completion(
         messages=[
             {"role": "system", "content": REFLECTION_SYSTEM},
             {
