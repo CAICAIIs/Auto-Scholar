@@ -195,6 +195,11 @@ register_error_handlers(app)
 # Exposes /metrics endpoint with http_requests_total, http_request_duration_seconds, etc.
 Instrumentator().instrument(app).expose(app)
 
+# Register health check routes
+from backend.api.routes.health import router as health_router
+
+app.include_router(health_router)
+
 
 @app.get("/healthz")
 async def healthz():
