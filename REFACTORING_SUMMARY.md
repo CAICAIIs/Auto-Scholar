@@ -6,7 +6,6 @@
 
 **提交记录:**
 - `1b4ce00` - refactor: repair frontend missing modules and barrel exports
-- `7c7c4af` - refactor: prepare api routes package structure
 
 **完成的改进:**
 
@@ -19,12 +18,44 @@
    - 更新 `frontend/src/components/console/index.ts` - 添加 `HistoryPanel` 导出
    - 更新 `frontend/src/components/workspace/index.ts` - 添加 `ChartsView`, `StructuredSummary`, `MethodComparisonTable` 导出
 
-3. **后端包结构准备**
-   - 创建 `backend/api/routes/__init__.py` - 为未来的路由拆分做准备
-
 **验证状态:**
 - ✅ Python 编译检查通过
 - ✅ 所有文件语法正确
+- ✅ 已推送到远程 develop 分支
+
+---
+
+### Wave 2: 后端模块化结构准备 ✅
+
+**提交记录:**
+- `7c7c4af` - refactor: prepare api routes package structure
+- `99fe514` - refactor: extract lifecycle management to core/lifecycle.py
+- `25b00df` - refactor: create modular route structure with domain separation
+
+**完成的改进:**
+
+1. **提取生命周期管理** (175 行)
+   - 创建 `backend/core/lifecycle.py` - 从 main.py 提取启动/关闭逻辑
+   - 包含信号处理、后台任务跟踪、优雅关闭序列
+   - 更新 `backend/core/__init__.py` - 导出所有生命周期工具
+
+2. **创建模块化路由结构** (7 个文件)
+   - `backend/api/routes/research.py` - 研究工作流端点 (start, approve, continue, status, stream)
+   - `backend/api/routes/sessions.py` - 会话管理端点
+   - `backend/api/routes/exports.py` - 导出和图表端点
+   - `backend/api/routes/evaluation.py` - 评估和评分端点
+   - `backend/api/routes/models.py` - 模型管理端点
+   - `backend/api/routes/health.py` - 健康检查端点
+   - `backend/api/routes/__init__.py` - 导出所有路由器
+
+**架构改进:**
+- ✅ 清晰的领域边界
+- ✅ 为端点迁移做好准备
+- ✅ 保持向后兼容（main.py 仍然工作）
+
+**验证状态:**
+- ✅ 所有文件编译通过 (0 错误)
+- ✅ 模块导入正确
 - ✅ 已推送到远程 develop 分支
 
 ---
