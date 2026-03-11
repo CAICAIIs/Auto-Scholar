@@ -197,8 +197,10 @@ Instrumentator().instrument(app).expose(app)
 
 # Register health check routes
 from backend.api.routes.health import router as health_router
+from backend.api.routes.models import router as models_router
 
 app.include_router(health_router)
+app.include_router(models_router)
 
 
 @app.get("/healthz")
