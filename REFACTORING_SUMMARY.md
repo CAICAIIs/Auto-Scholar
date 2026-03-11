@@ -60,6 +60,43 @@
 
 ---
 
+### Wave 3: 端点迁移到路由模块 ✅
+
+**提交记录:**
+- `a44eda0` - refactor: move health check endpoints to routes/health.py
+- `aeec3d9` - refactor: move model endpoints to routes/models.py
+
+**完成的迁移:**
+
+1. **健康检查端点** (104 行)
+   - `/healthz` - 存活探针
+   - `/readyz` - 就绪探针
+   - `/startupz` - 启动探针
+   - 迁移到 `backend/api/routes/health.py`
+
+2. **模型管理端点** (40 行)
+   - `/api/models` - 获取可用模型列表
+   - `/api/models/health` - 获取模型健康状态
+   - 迁移到 `backend/api/routes/models.py`
+
+**架构改进:**
+- ✅ 端点按领域组织
+- ✅ 使用 FastAPI 依赖注入访问 app.state
+- ✅ 保持向后兼容（main.py 中的旧端点仍然存在）
+- ✅ 清晰的路由注册模式
+
+**当前状态:**
+- `backend/main.py`: 904 行（从 897 行增加，因为添加了路由注册）
+- 已迁移端点: 5 个 (healthz, readyz, startupz, models, models/health)
+- 剩余端点: 13 个（在 main.py 中）
+
+**验证状态:**
+- ✅ 所有文件编译通过 (0 错误)
+- ✅ 路由正确注册
+- ✅ 已推送到远程 develop 分支
+
+---
+
 ## 待完成的工作 (Pending - Requires Full Test Environment)
 
 ### 环境限制
